@@ -1,7 +1,7 @@
 # Knowledge Distillation for Efficient Open-Vocabulary Vision (KDEOV)
 ## Transferring CLIP's Semantic Alignment to Lightweight Models
 
-## Group Members
+## Group(CY2502) Members
 - **PENG, MINQI** (1155191548)
 - **Zhu, KEYU** (1155191834)
 
