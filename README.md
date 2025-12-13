@@ -15,6 +15,45 @@ This Final Year Project (FYP) focuses on knowledge distillation techniques for e
 - Lightweight model optimization
 - Semantic alignment transfer
 
+## Installation
+
+### Environment Setup
+
+Follow these steps to set up the development environment:
+
+1. **Create a conda virtual environment with Python 3.9:**
+   ```bash
+   conda create -n kdeov python=3.9
+   conda activate kdeov
+   ```
+
+2. **Install PyTorch:**
+   
+   For CUDA (GPU support):
+   ```bash
+   pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+   ```
+   
+   For CPU only:
+   ```bash
+   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+   ```
+   
+   Or using conda:
+   ```bash
+   conda install pytorch torchvision -c pytorch
+   ```
+
+3. **Install other dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Install CLIP:**
+   ```bash
+   pip install git+https://github.com/openai/CLIP.git
+   ```
+
 ## Current Progress
 
 ### Term 1 (Completed)

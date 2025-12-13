@@ -1,0 +1,17 @@
+# Install PyTorch first using conda or pip with specific versions
+# For CUDA: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# For CPU: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Or use conda: conda install pytorch torchvision -c pytorch
+
+numpy
+Pillow
+ftfy
+regex
+tqdm
+ultralytics  # For YOLOv8
+# For YOLOv8 (alternative):
+# git+https://github.com/ultralytics/yolov8.git
+
+# Note: clip-by-openai should be installed separately after PyTorch
+# pip install git+https://github.com/openai/CLIP.git
+
