@@ -2,8 +2,8 @@
 ## Transferring CLIP's Semantic Alignment to Lightweight Models
 
 ## Group(CY2502) Members
-- **PENG, MINQI** (1155191548)
-- **Zhu, KEYU** (1155191834)
+- **PENG, Minqi** (1155191548)
+- **ZHU, Keyu** (1155191834)
 
 ## Project Overview
 
