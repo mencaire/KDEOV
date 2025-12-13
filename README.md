@@ -64,21 +64,97 @@ The first term has been primarily dedicated to **theoretical research** and foun
 - **Problem Analysis**: Analysis of challenges and opportunities in efficient open-vocabulary vision
 - **Research Proposal**: Detailed research proposal outlining the project scope, methodology, and expected contributions
 
+### Term 2 (In Progress) - Implementation Phase
+
+**Model Implementation (Completed):**
+- ✅ **Core Model Components**: Implemented all key components of the KDEOV architecture
+  - Frozen CLIP Text Encoder (`FrozenCLIPTextEncoder`)
+  - Lightweight Visual Backbone (`LightweightVisualBackbone`) with YOLOv8n/YOLOv5s support
+  - Projection Network (`ProjectionNetwork`) for feature alignment
+  - Cross-Modal Fusion Module (`CrossModalFusionModule`) with FiLM and Cross-Attention support
+- ✅ **Loss Functions**: Implemented comprehensive loss functions
+  - Distillation Loss (Cosine and L2 variants)
+  - Cross-Modal Alignment Loss (InfoNCE-based)
+  - Feature Alignment Loss (combined loss for end-to-end training)
+- ✅ **Main Model**: Complete `KDEOVModel` class with full training and inference interface
+- ✅ **Training Script**: Feature alignment pretraining script (`train_feature_alignment.py`)
+- ✅ **Usage Examples**: Example scripts demonstrating zero-shot classification, text-image retrieval, and forward pass
+
+**Environment Setup (Completed):**
+- ✅ Conda environment configuration (Python 3.9)
+- ✅ PyTorch installation with CUDA support
+- ✅ All dependencies installed and verified
+- ✅ IDE configuration for development
+
+**Next Steps:**
+- Dataset preparation and data loading implementation
+- Model training on real datasets
+- Performance evaluation and benchmarking
+- Model optimization and fine-tuning
+
 ### Documentation
 - [FYP Research Proposal](./Documents/FYP%20Research%20Proposal.pdf)
 - [FYP Term1 Midterm Report](./Documents/FYP%20Term1%20Midterm%20Report.pdf)
 - [FYP Term1 End Report](./Documents/FYP%20Term1%20End%20Report.pdf)
+- [Development Log](./Development_Log.md) - Detailed implementation progress and work log
+- [Model Architecture Documentation](./models/README.md) - Detailed model component documentation
 
-## Next Steps
-- Implementation of knowledge distillation framework
-- Experimental design and dataset preparation
-- Model training and evaluation
-- Performance analysis and optimization
+## Usage
+
+### Quick Start
+
+1. **Initialize the model:**
+   ```python
+   from models import KDEOVModel
+   
+   model = KDEOVModel(
+       clip_model_name="ViT-B/32",
+       backbone_type="yolov8n",
+       fusion_type="film",
+       device="cuda"
+   )
+   ```
+
+2. **Zero-shot classification:**
+   ```python
+   image = ...  # Your image tensor
+   class_names = ["cat", "dog", "bird"]
+   logits = model.zero_shot_classify(image, class_names)
+   ```
+
+3. **Training:**
+   ```python
+   from train_feature_alignment import train_feature_alignment
+   
+   train_feature_alignment(
+       model=model,
+       dataloader=your_dataloader,
+       num_epochs=10,
+       learning_rate=1e-4,
+       device="cuda"
+   )
+   ```
+
+For more examples, see [`example_usage.py`](./example_usage.py).
 
 ## Repository Structure
 ```
 KDEOV/
-├── Documents/          # Project documentation and reports
-├── README.md          # Project overview and documentation
-└── ...
+├── models/                    # Model implementation
+│   ├── __init__.py           # Package exports
+│   ├── components.py         # Model components (encoders, backbones, fusion)
+│   ├── kdeov_model.py       # Main KDEOV model class
+│   ├── losses.py             # Loss functions
+│   └── README.md             # Model architecture documentation
+├── train_feature_alignment.py # Training script
+├── example_usage.py          # Usage examples
+├── requirements.txt          # Python dependencies
+├── README.md                 # This file
+├── Development_Log.md        # Development log and work progress
+├── Documents/                # Project documentation and reports
+│   ├── FYP Research Proposal.pdf
+│   ├── FYP Term1 Midterm Report.pdf
+│   └── FYP Term1 End Report.pdf
+└── .vscode/                  # IDE configuration
+    └── settings.json         # Python interpreter settings
 ```
