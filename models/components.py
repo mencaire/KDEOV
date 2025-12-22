@@ -20,18 +20,16 @@ class FrozenCLIPTextEncoder(nn.Module):
     in the CLIP embedding space.
     """
     
-    def __init__(self, model_name: str = "ViT-B/32", device: str = "cuda"):
+    def __init__(self, model_name: str = "ViT-B/32"):
         """
         Args:
             model_name: CLIP model variant (e.g., "ViT-B/32", "ViT-L/14")
-            device: Device to load the model on
         """
         super().__init__()
         self.model_name = model_name
-        self.device = device
         
-        # Load CLIP model
-        clip_model, _ = clip.load(model_name, device=device)
+        # Load CLIP model (always on CUDA)
+        clip_model, _ = clip.load(model_name, device="cuda")
         self.text_encoder = clip_model.encode_text
         
         # Freeze all parameters

@@ -22,19 +22,16 @@ def example_zero_shot_classification():
     print("Example 1: Zero-shot Classification")
     print("=" * 50)
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    # Initialize model
+    # Initialize model (automatically on CUDA)
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
         backbone_type="yolov8n",
-        fusion_type="film",
-        device=device
-    ).to(device)
+        fusion_type="film"
+    ).cuda()
     model.eval()
     
     # Example image (in practice, load from file)
-    image = torch.randn(1, 3, 224, 224).to(device)
+    image = torch.randn(1, 3, 224, 224).cuda()
     
     # Class names
     class_names = ["cat", "dog", "bird", "car", "bicycle"]
@@ -59,25 +56,22 @@ def example_text_image_retrieval():
     print("Example 2: Text-Image Retrieval")
     print("=" * 50)
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    # Initialize model
+    # Initialize model (automatically on CUDA)
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
         backbone_type="yolov8n",
-        fusion_type="film",
-        device=device
-    ).to(device)
+        fusion_type="film"
+    ).cuda()
     model.eval()
     
     # Example: Database of images
     num_images = 10
-    images = torch.randn(num_images, 3, 224, 224).to(device)
+    images = torch.randn(num_images, 3, 224, 224).cuda()
     
     # Query text
     query_text = "a photo of a cat"
     tokenizer = clip.tokenize
-    text_tokens = tokenizer([query_text]).to(device)
+    text_tokens = tokenizer([query_text]).cuda()
     
     # Encode images and text
     with torch.no_grad():
@@ -103,23 +97,20 @@ def example_forward_pass():
     print("Example 3: Forward Pass")
     print("=" * 50)
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    # Initialize model
+    # Initialize model (automatically on CUDA)
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
         backbone_type="yolov8n",
-        fusion_type="film",
-        device=device
-    ).to(device)
+        fusion_type="film"
+    ).cuda()
     model.eval()
     
     # Example inputs
     batch_size = 4
-    images = torch.randn(batch_size, 3, 224, 224).to(device)
+    images = torch.randn(batch_size, 3, 224, 224).cuda()
     query_text = "a photo of a dog"
     tokenizer = clip.tokenize
-    text_tokens = tokenizer([query_text] * batch_size).to(device)
+    text_tokens = tokenizer([query_text] * batch_size).cuda()
     
     # Forward pass
     with torch.no_grad():

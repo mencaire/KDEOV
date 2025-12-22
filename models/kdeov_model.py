@@ -41,8 +41,7 @@ class KDEOVModel(nn.Module):
         clip_model_name: str = "ViT-B/32",
         backbone_type: str = "yolov8n",
         fusion_type: str = "film",
-        embedding_dim: int = 512,
-        device: str = "cuda"
+        embedding_dim: int = 512
     ):
         """
         Args:
@@ -50,17 +49,14 @@ class KDEOVModel(nn.Module):
             backbone_type: YOLO backbone type ("yolov8n" or "yolov5s")
             fusion_type: Fusion module type ("film" or "cross_attention")
             embedding_dim: Embedding dimension (should match CLIP)
-            device: Device to run on
         """
         super().__init__()
         
         self.embedding_dim = embedding_dim
-        self.device = device
         
         # Components
         self.text_encoder = FrozenCLIPTextEncoder(
-            model_name=clip_model_name,
-            device=device
+            model_name=clip_model_name
         )
         
         self.visual_backbone = LightweightVisualBackbone(
@@ -90,7 +86,7 @@ class KDEOVModel(nn.Module):
         """Load CLIP image encoder for distillation (frozen)"""
         if self.clip_image_encoder is None:
             import clip
-            clip_model, _ = clip.load(self.text_encoder.model_name, device=self.device)
+            clip_model, _ = clip.load(self.text_encoder.model_name, device="cuda")
             self.clip_image_encoder = clip_model.encode_image
             
             # Freeze
@@ -237,7 +233,7 @@ class KDEOVModel(nn.Module):
         
         # Tokenize
         tokenizer = clip.tokenize
-        text_tokens = tokenizer(prompts).to(self.device)
+        text_tokens = tokenizer(prompts).cuda()
         
         # Encode
         text_embeddings = self.text_encoder(text_tokens)

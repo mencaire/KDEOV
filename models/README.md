@@ -64,28 +64,27 @@ from models import KDEOVModel
 import torch
 import clip
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-# Initialize model
+# Initialize model (automatically on CUDA)
 model = KDEOVModel(
     clip_model_name="ViT-B/32",
     backbone_type="yolov8n",
-    fusion_type="film",
-    device=device
-).to(device)
+    fusion_type="film"
+).cuda()
 
 # Encode images
-images = torch.randn(4, 3, 224, 224).to(device)
+images = torch.randn(4, 3, 224, 224).cuda()
 image_embeddings = model.encode_image(images)
 
 # Encode text
-text = clip.tokenize(["a photo of a cat"]).to(device)
+text = clip.tokenize(["a photo of a cat"]).cuda()
 text_embeddings = model.encode_text(text)
 
 # Zero-shot classification
 class_names = ["cat", "dog", "bird"]
 logits = model.zero_shot_classify(images, class_names)
 ```
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+read_file
 
 ### Training
 

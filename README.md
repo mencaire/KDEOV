@@ -165,9 +165,8 @@ This repository contains comprehensive documentation organized into the followin
   model = KDEOVModel(
       clip_model_name="ViT-B/32",  # CLIP model name
       backbone_type="yolov8n",     # Visual backbone: yolov8n or yolov5s
-      fusion_type="film",          # Fusion method: film or cross_attention
-      device="cuda"                 # Device: cuda or cpu
-  )
+      fusion_type="film"            # Fusion method: film or cross_attention
+  ).cuda()
   ```
 
 #### `models/losses.py`
@@ -208,7 +207,7 @@ This repository contains comprehensive documentation organized into the followin
   from torch.utils.data import DataLoader
   
   # Initialize model
-  model = KDEOVModel(...).to(device)
+  model = KDEOVModel(...).cuda()
   
   # Prepare data loader (requires custom dataset implementation)
   dataloader = DataLoader(your_dataset, batch_size=32, shuffle=True)
@@ -219,7 +218,6 @@ This repository contains comprehensive documentation organized into the followin
       dataloader=dataloader,
       num_epochs=10,
       learning_rate=1e-4,
-      device="cuda",
       save_path="checkpoints/kdeov"  # Checkpoint save path
   )
   ```
@@ -340,15 +338,12 @@ python example_usage.py
 import torch
 from models import KDEOVModel
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-# Create model instance
+# Create model instance (automatically on CUDA)
 model = KDEOVModel(
     clip_model_name="ViT-B/32",  # Options: RN50, RN101, ViT-B/16, ViT-L/14, etc.
     backbone_type="yolov8n",    # Options: yolov8n, yolov5s
-    fusion_type="film",          # Options: film, cross_attention
-    device=device
-).to(device)
+    fusion_type="film"           # Options: film, cross_attention
+).cuda()
 
 # Set to evaluation mode
 model.eval()
@@ -370,7 +365,7 @@ transform = transforms.Compose([
 ])
 
 image = Image.open("your_image.jpg")
-image_tensor = transform(image).unsqueeze(0).to(device)
+image_tensor = transform(image).unsqueeze(0).cuda()
 
 # Define class names
 class_names = ["cat", "dog", "bird", "car", "bicycle"]
@@ -391,11 +386,11 @@ import clip
 
 # Prepare image database (example)
 image_database = [...]  # Your list of images
-image_tensors = torch.stack([transform(img) for img in image_database]).to(device)
+image_tensors = torch.stack([transform(img) for img in image_database]).cuda()
 
 # Query text
 query_text = "a photo of a cat"
-text_tokens = clip.tokenize([query_text]).to(device)
+text_tokens = clip.tokenize([query_text]).cuda()
 
 # Encode
 with torch.no_grad():
@@ -434,8 +429,8 @@ class YourDataset(Dataset):
 dataset = YourDataset()
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-# Initialize model
-model = KDEOVModel(...).to(device)
+# Initialize model (automatically on CUDA)
+model = KDEOVModel(...).cuda()
 
 # Start training
 train_feature_alignment(
@@ -443,7 +438,6 @@ train_feature_alignment(
     dataloader=dataloader,
     num_epochs=10,
     learning_rate=1e-4,
-    device=device,
     save_path="checkpoints/kdeov"
 )
 ```

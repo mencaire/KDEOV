@@ -21,18 +21,16 @@ def train_feature_alignment(
     dataloader: DataLoader,
     num_epochs: int = 10,
     learning_rate: float = 1e-4,
-    device: str = "cuda",
     save_path: Optional[str] = None
 ):
     """
     Train model with feature alignment pretraining
     
     Args:
-        model: KDEOV model instance
+        model: KDEOV model instance (assumed to be on CUDA)
         dataloader: DataLoader with (images, texts) pairs
         num_epochs: Number of training epochs
         learning_rate: Learning rate
-        device: Training device
         save_path: Path to save checkpoint
     """
     # Load CLIP image encoder for teacher embeddings
@@ -65,8 +63,8 @@ def train_feature_alignment(
         total_align_loss = 0.0
         
         for batch_idx, (images, texts) in enumerate(dataloader):
-            images = images.to(device)
-            texts = texts.to(device)
+            images = images.cuda()
+            texts = texts.cuda()
             
             # Forward pass through student model
             student_outputs = model(images=images, text=texts, use_fusion=True)
@@ -141,15 +139,12 @@ def train_feature_alignment(
 
 if __name__ == "__main__":
     # Example usage
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    # Initialize model
+    # Initialize model (automatically on CUDA)
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
         backbone_type="yolov8n",
-        fusion_type="film",
-        device=device
-    ).to(device)
+        fusion_type="film"
+    ).cuda()
     
     # Example: Create a dummy dataset
     # In practice, you would use a real dataset with image-text pairs
@@ -180,7 +175,6 @@ if __name__ == "__main__":
         dataloader=dataloader,
         num_epochs=5,
         learning_rate=1e-4,
-        device=device,
         save_path="checkpoints/kdeov"
     )
 
