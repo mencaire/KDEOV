@@ -267,6 +267,22 @@ This repository contains comprehensive documentation organized into the followin
   - Check available models: Quickly see all CLIP models you can use
   - No downloads: The script only lists model names without downloading any weights
 
+#### `verify_ultralytics.py`
+- **Purpose**: Verify ultralytics (YOLOv8) installation and import success
+- **Functionality**:
+  - Verifies that `import ultralytics` works correctly
+  - Checks if YOLO class can be imported
+  - Displays module location and version information
+  - Lists available YOLOv8 model sizes
+- **Usage**:
+  ```bash
+  python verify_ultralytics.py
+  ```
+- **Use Cases**:
+  - Verify ultralytics installation: If the script runs successfully, it confirms that `import ultralytics` works correctly
+  - Check YOLO availability: Verifies that YOLO class is available for use in KDEOV project
+  - No downloads: The script only checks imports without downloading any models
+
 ### Configuration Files
 
 #### `requirements.txt`
@@ -289,22 +305,26 @@ First, ensure the conda environment is activated and all dependencies are instal
 conda activate KDEOV
 ```
 
-**Verify CLIP installation:**
+**Verify dependencies installation:**
 
-You can verify that CLIP is properly installed and can be imported by running:
+You can verify that required packages are properly installed by running:
 
 ```bash
 # Method 1: Quick verification
-python -c "import torch; import clip; print('Environment OK!')"
+python -c "import torch; import clip; from ultralytics import YOLO; print('Environment OK!')"
 
-# Method 2: List available CLIP models (recommended)
+# Method 2: Verify CLIP installation (recommended)
 python list_clip_models.py
+
+# Method 3: Verify ultralytics installation (recommended)
+python verify_ultralytics.py
 ```
 
-The `list_clip_models.py` script is particularly useful as it:
-- Confirms that `import clip` works successfully
-- Lists all available CLIP models without downloading them
-- Provides immediate feedback if CLIP is not installed correctly
+The verification scripts are particularly useful as they:
+- Confirm that imports work successfully (`import clip` and `import ultralytics`)
+- Provide immediate feedback if packages are not installed correctly
+- List available models without downloading them
+- Display helpful installation instructions if packages are missing
 
 #### 2. Run Example Code
 
@@ -459,6 +479,11 @@ train_feature_alignment(
 - Alternatively, run `python -c "import clip; print(clip.available_models())"` to quickly check
 - If you get an ImportError, ensure you've activated the conda environment and installed CLIP
 
+**Q: How to verify ultralytics (YOLOv8) is installed correctly?**
+- Run `python verify_ultralytics.py` - if it shows success messages, ultralytics is properly installed
+- Alternatively, run `python -c "from ultralytics import YOLO; print('YOLO available')"` to quickly check
+- If you get an ImportError, ensure you've activated the conda environment and installed ultralytics via `pip install ultralytics`
+
 ## Repository Structure
 
 ```
@@ -481,6 +506,10 @@ KDEOV/
 ├── list_clip_models.py              # CLIP models listing utility
 │                                      # Purpose: List available CLIP models and verify CLIP installation
 │                                      # Execution: python list_clip_models.py
+│
+├── verify_ultralytics.py            # Ultralytics verification utility
+│                                      # Purpose: Verify ultralytics installation and YOLO availability
+│                                      # Execution: python verify_ultralytics.py
 │
 ├── requirements.txt                  # Python dependency package list
 │                                      # Purpose: Define all required Python packages for the project
@@ -513,6 +542,7 @@ KDEOV/
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
 | `list_clip_models.py` | Executable Script | List CLIP models, verify installation | `python list_clip_models.py` |
+| `verify_ultralytics.py` | Executable Script | Verify ultralytics installation | `python verify_ultralytics.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |
