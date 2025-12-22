@@ -455,35 +455,6 @@ train_feature_alignment(
 4. **Model Inference**: Call appropriate methods (zero-shot classification, retrieval, etc.)
 5. **Model Training** (Optional): Use training script for feature alignment pretraining
 
-### Frequently Asked Questions
-
-**Q: How to choose backbone_type?**
-- `yolov8n`: More lightweight, faster, suitable for resource-constrained environments
-- `yolov5s`: Better performance, but with more parameters
-
-**Q: How to choose fusion_type?**
-- `film`: Higher computational efficiency, suitable for fast inference
-- `cross_attention`: Stronger expressive power, but with greater computational overhead
-
-**Q: Out of memory during training?**
-- Reduce batch_size
-- Use gradient accumulation
-- Train on CPU (slower speed)
-
-**Q: CLIP model is slow on first use?**
-- This is normal; CLIP will download pretrained weights (approximately 300-600MB)
-- After download completion, weights are cached and subsequent usage will be faster
-
-**Q: How to verify CLIP is installed correctly?**
-- Run `python list_clip_models.py` - if it successfully lists models, CLIP is properly installed
-- Alternatively, run `python -c "import clip; print(clip.available_models())"` to quickly check
-- If you get an ImportError, ensure you've activated the conda environment and installed CLIP
-
-**Q: How to verify ultralytics (YOLOv8) is installed correctly?**
-- Run `python verify_ultralytics.py` - if it shows success messages, ultralytics is properly installed
-- Alternatively, run `python -c "from ultralytics import YOLO; print('YOLO available')"` to quickly check
-- If you get an ImportError, ensure you've activated the conda environment and installed ultralytics via `pip install ultralytics`
-
 ## Repository Structure
 
 ```
