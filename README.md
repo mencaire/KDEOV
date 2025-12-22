@@ -250,37 +250,22 @@ This repository contains comprehensive documentation organized into the followin
 
 ### Utility Scripts
 
-#### `verify_clip.py`
-- **Purpose**: Verify CLIP installation and list all available CLIP models without downloading them
+#### `test_environment.py`
+- **Purpose**: Comprehensive environment verification script for CUDA, CLIP, and ultralytics
 - **Functionality**:
-  - Verifies that `import clip` works correctly
-  - Lists all available CLIP model names
-  - Categorizes models (ResNet vs ViT)
-  - Confirms CLIP installation success
+  - Verifies CUDA availability and GPU information
+  - Tests CLIP import and basic functionality (lists available models without downloading)
+  - Tests ultralytics import and YOLO class availability
+  - Performs integration tests with CUDA tensor operations
 - **Usage**:
   ```bash
-  python verify_clip.py
+  python test_environment.py
   ```
 - **Use Cases**:
-  - Verify CLIP installation: If the script runs successfully, it confirms that `import clip` works correctly
-  - Check available models: Quickly see all CLIP models you can use
-  - No downloads: The script only lists model names without downloading any weights
-
-#### `verify_ultralytics.py`
-- **Purpose**: Verify ultralytics (YOLOv8) installation and import success
-- **Functionality**:
-  - Verifies that `import ultralytics` works correctly
-  - Checks if YOLO class can be imported
-  - Displays module location and version information
-  - Lists available YOLOv8 model sizes
-- **Usage**:
-  ```bash
-  python verify_ultralytics.py
-  ```
-- **Use Cases**:
-  - Verify ultralytics installation: If the script runs successfully, it confirms that `import ultralytics` works correctly
-  - Check YOLO availability: Verifies that YOLO class is available for use in KDEOV project
-  - No downloads: The script only checks imports without downloading any models
+  - Complete environment check: Verifies all required components (CUDA, CLIP, ultralytics) in one script
+  - GPU information: Displays detailed GPU specifications and memory
+  - Quick verification: Run before starting training to ensure everything is properly configured
+  - No downloads: The script only checks imports and basic functionality without downloading models
 
 ### Configuration Files
 
@@ -309,21 +294,20 @@ conda activate KDEOV
 You can verify that required packages are properly installed by running:
 
 ```bash
-# Method 1: Quick verification
+# Method 1: Comprehensive verification (recommended)
+python test_environment.py
+
+# Method 2: Quick verification
 python -c "import torch; import clip; from ultralytics import YOLO; print('Environment OK!')"
-
-# Method 2: Verify CLIP installation (recommended)
-python verify_clip.py
-
-# Method 3: Verify ultralytics installation (recommended)
-python verify_ultralytics.py
 ```
 
-The verification scripts are particularly useful as they:
-- Confirm that imports work successfully (`import clip` and `import ultralytics`)
-- Provide immediate feedback if packages are not installed correctly
-- List available models without downloading them
-- Display helpful installation instructions if packages are missing
+The `test_environment.py` script provides comprehensive verification:
+- Confirms CUDA availability and displays GPU information
+- Verifies that imports work successfully (`import clip` and `import ultralytics`)
+- Lists available CLIP models without downloading them
+- Tests basic CUDA tensor operations
+- Provides immediate feedback if packages are not installed correctly
+- Displays helpful installation instructions if packages are missing
 
 #### 2. Run Example Code
 
@@ -469,13 +453,9 @@ KDEOV/
 │                                      # Purpose: Demonstrate zero-shot classification, text-image retrieval, etc.
 │                                      # Execution: python example_usage.py
 │
-├── verify_clip.py                   # CLIP verification utility
-│                                      # Purpose: Verify CLIP installation and list available models
-│                                      # Execution: python verify_clip.py
-│
-├── verify_ultralytics.py            # Ultralytics verification utility
-│                                      # Purpose: Verify ultralytics installation and YOLO availability
-│                                      # Execution: python verify_ultralytics.py
+├── test_environment.py             # Environment verification script
+│                                      # Purpose: Verify CUDA, CLIP, and ultralytics availability
+│                                      # Execution: python test_environment.py
 │
 ├── requirements.txt                  # Python dependency package list
 │                                      # Purpose: Define all required Python packages for the project
@@ -507,8 +487,7 @@ KDEOV/
 | `models/losses.py` | Python Module | Loss functions | `from models import FeatureAlignmentLoss` |
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
-| `verify_clip.py` | Executable Script | Verify CLIP installation, list models | `python verify_clip.py` |
-| `verify_ultralytics.py` | Executable Script | Verify ultralytics installation | `python verify_ultralytics.py` |
+| `test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_environment.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |
