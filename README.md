@@ -252,15 +252,16 @@ This repository contains comprehensive documentation organized into the followin
 
 ### Utility Scripts
 
-#### `list_clip_models.py`
-- **Purpose**: List all available CLIP models without downloading them
+#### `verify_clip.py`
+- **Purpose**: Verify CLIP installation and list all available CLIP models without downloading them
 - **Functionality**:
+  - Verifies that `import clip` works correctly
   - Lists all available CLIP model names
   - Categorizes models (ResNet vs ViT)
-  - Verifies CLIP installation and import success
+  - Confirms CLIP installation success
 - **Usage**:
   ```bash
-  python list_clip_models.py
+  python verify_clip.py
   ```
 - **Use Cases**:
   - Verify CLIP installation: If the script runs successfully, it confirms that `import clip` works correctly
@@ -314,7 +315,7 @@ You can verify that required packages are properly installed by running:
 python -c "import torch; import clip; from ultralytics import YOLO; print('Environment OK!')"
 
 # Method 2: Verify CLIP installation (recommended)
-python list_clip_models.py
+python verify_clip.py
 
 # Method 3: Verify ultralytics installation (recommended)
 python verify_ultralytics.py
@@ -474,9 +475,9 @@ KDEOV/
 │                                      # Purpose: Demonstrate zero-shot classification, text-image retrieval, etc.
 │                                      # Execution: python example_usage.py
 │
-├── list_clip_models.py              # CLIP models listing utility
-│                                      # Purpose: List available CLIP models and verify CLIP installation
-│                                      # Execution: python list_clip_models.py
+├── verify_clip.py                   # CLIP verification utility
+│                                      # Purpose: Verify CLIP installation and list available models
+│                                      # Execution: python verify_clip.py
 │
 ├── verify_ultralytics.py            # Ultralytics verification utility
 │                                      # Purpose: Verify ultralytics installation and YOLO availability
@@ -512,7 +513,7 @@ KDEOV/
 | `models/losses.py` | Python Module | Loss functions | `from models import FeatureAlignmentLoss` |
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
-| `list_clip_models.py` | Executable Script | List CLIP models, verify installation | `python list_clip_models.py` |
+| `verify_clip.py` | Executable Script | Verify CLIP installation, list models | `python verify_clip.py` |
 | `verify_ultralytics.py` | Executable Script | Verify ultralytics installation | `python verify_ultralytics.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |

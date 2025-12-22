@@ -1,11 +1,11 @@
 """
-Simple script to list all available CLIP models
-Only lists model names without downloading them
+Simple script to verify CLIP installation
+Lists available models without downloading them
 """
 
-def list_clip_models():
+def verify_clip():
     """
-    List all available CLIP models (without downloading)
+    Verify CLIP installation and list available models (without downloading)
     """
     try:
         import clip
@@ -16,8 +16,10 @@ def list_clip_models():
         return
     
     print("=" * 60)
-    print("Available CLIP Models")
+    print("CLIP Installation Verification")
     print("=" * 60)
+    
+    print("\n✓ Successfully imported CLIP module")
     
     # Get list of available models (this doesn't download anything)
     available_models = clip.available_models()
@@ -48,11 +50,16 @@ def list_clip_models():
             print(f"  - {model}")
     
     print("\n" + "=" * 60)
+    print("Verification Result")
+    print("=" * 60)
+    print("✓ CLIP is properly installed and can be imported")
+    print("✓ Ready to use CLIP models in KDEOV project")
+    print("\n" + "=" * 60)
 
 
 if __name__ == "__main__":
     try:
-        list_clip_models()
+        verify_clip()
     except ImportError:
         print("Error: CLIP module not found.")
         print("Please install CLIP using:")
