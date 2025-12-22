@@ -250,6 +250,23 @@ This repository contains comprehensive documentation organized into the followin
   - Examples use random data; replace with real images and text for actual usage
   - First run will automatically download CLIP pretrained weights
 
+### Utility Scripts
+
+#### `list_clip_models.py`
+- **Purpose**: List all available CLIP models without downloading them
+- **Functionality**:
+  - Lists all available CLIP model names
+  - Categorizes models (ResNet vs ViT)
+  - Verifies CLIP installation and import success
+- **Usage**:
+  ```bash
+  python list_clip_models.py
+  ```
+- **Use Cases**:
+  - Verify CLIP installation: If the script runs successfully, it confirms that `import clip` works correctly
+  - Check available models: Quickly see all CLIP models you can use
+  - No downloads: The script only lists model names without downloading any weights
+
 ### Configuration Files
 
 #### `requirements.txt`
@@ -270,8 +287,24 @@ First, ensure the conda environment is activated and all dependencies are instal
 
 ```bash
 conda activate KDEOV
-python -c "import torch; import clip; print('Environment OK!')"
 ```
+
+**Verify CLIP installation:**
+
+You can verify that CLIP is properly installed and can be imported by running:
+
+```bash
+# Method 1: Quick verification
+python -c "import torch; import clip; print('Environment OK!')"
+
+# Method 2: List available CLIP models (recommended)
+python list_clip_models.py
+```
+
+The `list_clip_models.py` script is particularly useful as it:
+- Confirms that `import clip` works successfully
+- Lists all available CLIP models without downloading them
+- Provides immediate feedback if CLIP is not installed correctly
 
 #### 2. Run Example Code
 
@@ -421,6 +454,11 @@ train_feature_alignment(
 - This is normal; CLIP will download pretrained weights (approximately 300-600MB)
 - After download completion, weights are cached and subsequent usage will be faster
 
+**Q: How to verify CLIP is installed correctly?**
+- Run `python list_clip_models.py` - if it successfully lists models, CLIP is properly installed
+- Alternatively, run `python -c "import clip; print(clip.available_models())"` to quickly check
+- If you get an ImportError, ensure you've activated the conda environment and installed CLIP
+
 ## Repository Structure
 
 ```
@@ -439,6 +477,10 @@ KDEOV/
 ├── example_usage.py                  # Model usage examples
 │                                      # Purpose: Demonstrate zero-shot classification, text-image retrieval, etc.
 │                                      # Execution: python example_usage.py
+│
+├── list_clip_models.py              # CLIP models listing utility
+│                                      # Purpose: List available CLIP models and verify CLIP installation
+│                                      # Execution: python list_clip_models.py
 │
 ├── requirements.txt                  # Python dependency package list
 │                                      # Purpose: Define all required Python packages for the project
@@ -470,6 +512,7 @@ KDEOV/
 | `models/losses.py` | Python Module | Loss functions | `from models import FeatureAlignmentLoss` |
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
+| `list_clip_models.py` | Executable Script | List CLIP models, verify installation | `python list_clip_models.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |
