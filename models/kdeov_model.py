@@ -64,8 +64,22 @@ class KDEOVModel(nn.Module):
             pretrained=True
         )
         
-        # Get feature dimension from backbone
-        backbone_output_dim = self.visual_backbone.feature_dims[-1]
+        # Dynamically get actual feature dimension from backbone
+        # Create a dummy input to get real output dimensions
+        # Note: Keep dummy_input on CPU since model is not moved to CUDA yet during __init__
+        with torch.no_grad():
+            dummy_input = torch.randn(1, 3, 224, 224)  # Keep on CPU
+            dummy_features = self.visual_backbone(dummy_input)
+            # Get the last feature map
+            if isinstance(dummy_features, list):
+                final_feature = dummy_features[-1]
+            else:
+                final_feature = dummy_features
+            # Get channel dimension
+            if len(final_feature.shape) > 2:
+                backbone_output_dim = final_feature.shape[1]  # [B, C, H, W]
+            else:
+                backbone_output_dim = final_feature.shape[-1]  # [B, C]
         
         self.projection = ProjectionNetwork(
             input_dim=backbone_output_dim,

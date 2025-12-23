@@ -62,6 +62,13 @@ class DistillationLoss(nn.Module):
         Returns:
             Distillation loss value
         """
+        # Ensure dtype consistency
+        if student_embeddings.dtype != teacher_embeddings.dtype:
+            # Convert to the higher precision dtype (float32)
+            target_dtype = torch.float32 if student_embeddings.dtype == torch.float32 or teacher_embeddings.dtype == torch.float32 else teacher_embeddings.dtype
+            student_embeddings = student_embeddings.to(dtype=target_dtype)
+            teacher_embeddings = teacher_embeddings.to(dtype=target_dtype)
+        
         # Ensure embeddings are normalized
         student_embeddings = F.normalize(student_embeddings, dim=-1)
         teacher_embeddings = F.normalize(teacher_embeddings, dim=-1)
@@ -125,6 +132,13 @@ class CrossModalAlignmentLoss(nn.Module):
             Contrastive loss value
         """
         batch_size = image_embeddings.shape[0]
+        
+        # Ensure dtype consistency
+        if image_embeddings.dtype != text_embeddings.dtype:
+            # Convert to the higher precision dtype (float32)
+            target_dtype = torch.float32 if image_embeddings.dtype == torch.float32 or text_embeddings.dtype == torch.float32 else text_embeddings.dtype
+            image_embeddings = image_embeddings.to(dtype=target_dtype)
+            text_embeddings = text_embeddings.to(dtype=target_dtype)
         
         # Normalize embeddings
         image_embeddings = F.normalize(image_embeddings, dim=-1)

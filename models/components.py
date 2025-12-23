@@ -302,9 +302,36 @@ class CrossModalFusionModule(nn.Module):
         Modulates image features using scale and shift parameters
         generated from text embeddings.
         """
+        # Ensure dtype consistency: convert text_embeddings to match film_generator dtype
+        if text_embeddings.dtype != next(self.film_generator.parameters()).dtype:
+            text_embeddings = text_embeddings.to(dtype=next(self.film_generator.parameters()).dtype)
+        
+        # Get actual image feature channel dimension
+        if len(image_features.shape) > 2:
+            actual_image_dim = image_features.shape[1]  # [B, C, H, W]
+        else:
+            actual_image_dim = image_features.shape[-1]  # [B, C]
+        
         # Generate FiLM parameters (scale and shift)
         film_params = self.film_generator(text_embeddings)
         scale, shift = torch.chunk(film_params, 2, dim=-1)
+        
+        # If dimensions don't match, create or use projection layers
+        if scale.shape[-1] != actual_image_dim:
+            # Create projection layers if they don't exist or dimensions changed
+            proj_key = f'_film_proj_{scale.shape[-1]}_to_{actual_image_dim}'
+            if not hasattr(self, proj_key):
+                # Create and register as buffer/parameter so it's part of the model
+                scale_proj = nn.Linear(scale.shape[-1], actual_image_dim).to(scale.device).to(scale.dtype)
+                shift_proj = nn.Linear(shift.shape[-1], actual_image_dim).to(shift.device).to(shift.dtype)
+                # Register as submodules so they're part of the model
+                self.add_module(f'film_scale_proj_{scale.shape[-1]}_{actual_image_dim}', scale_proj)
+                self.add_module(f'film_shift_proj_{shift.shape[-1]}_{actual_image_dim}', shift_proj)
+                setattr(self, proj_key, (scale_proj, shift_proj))
+            
+            scale_proj, shift_proj = getattr(self, proj_key)
+            scale = scale_proj(scale)
+            shift = shift_proj(shift)
         
         # Expand to match image feature spatial dimensions
         original_shape = image_features.shape
@@ -331,6 +358,10 @@ class CrossModalFusionModule(nn.Module):
         
         Uses text embeddings as keys/values and image features as queries.
         """
+        # Ensure dtype consistency: convert text_embeddings to match projection layer dtype
+        if text_embeddings.dtype != next(self.key_proj.parameters()).dtype:
+            text_embeddings = text_embeddings.to(dtype=next(self.key_proj.parameters()).dtype)
+        
         # Flatten spatial dimensions if needed
         original_shape = image_features.shape
         if len(original_shape) > 2:

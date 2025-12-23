@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from typing import Dict, Optional
+import os
 import clip  # type: ignore
 
 from models import KDEOVModel, FeatureAlignmentLoss
@@ -127,6 +128,11 @@ def train_feature_alignment(
         
         # Save checkpoint
         if save_path:
+            # Create directory if it doesn't exist
+            checkpoint_dir = os.path.dirname(save_path)
+            if checkpoint_dir and not os.path.exists(checkpoint_dir):
+                os.makedirs(checkpoint_dir, exist_ok=True)
+            
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
