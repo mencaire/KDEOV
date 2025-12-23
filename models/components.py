@@ -24,20 +24,21 @@ class FrozenCLIPTextEncoder(nn.Module):
         """
         Args:
             model_name: CLIP model variant (e.g., "ViT-B/32", "ViT-L/14")
-            device: Device to load CLIP model on (default: "cuda" if available, else "cpu")
+            device: Device to load CLIP model on (default: auto-detect - MPS/CUDA/CPU)
         """
         super().__init__()
         self.model_name = model_name
         
-        # 自动检测设备 (支持 Mac MPS, NVIDIA CUDA, 普通 CPU)
-        if torch.cuda.is_available():
-            self.device = "cuda"
-        elif torch.backends.mps.is_available():
-            self.device = "mps"
+        # Use provided device, or auto-detect (support Mac MPS, NVIDIA CUDA, or CPU)
+        if device is not None:
+            self.device = device
         else:
-            self.device = "cpu"
-            
-        print(f"Loading CLIP Text Encoder on: {self.device}")
+            if torch.cuda.is_available():
+                self.device = "cuda"
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self.device = "mps"
+            else:
+                self.device = "cpu"
         
         # Load CLIP model on the correct device
         clip_model, _ = clip.load(model_name, device=self.device)

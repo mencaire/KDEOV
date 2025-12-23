@@ -55,8 +55,13 @@ class KDEOVModel(nn.Module):
         self.embedding_dim = embedding_dim
         
         # Get device (will be set when model is moved to device)
-        # For now, default to CUDA if available
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Support Mac MPS, NVIDIA CUDA, or CPU
+        if torch.cuda.is_available():
+            self._device = torch.device("cuda")
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self._device = torch.device("mps")
+        else:
+            self._device = torch.device("cpu")
         
         # Components
         self.text_encoder = FrozenCLIPTextEncoder(

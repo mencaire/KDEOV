@@ -20,8 +20,17 @@ import numpy as np
 
 from models import KDEOVModel, FeatureAlignmentLoss
 
-# Set device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Set device (support Mac MPS, NVIDIA CUDA, or CPU)
+def get_device():
+    """Get the best available device"""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+device = get_device()
 
 
 def plot_training_curves(
@@ -343,6 +352,10 @@ def train_feature_alignment(
 
 if __name__ == "__main__":
     # Example usage
+    # Get device (support Mac MPS, NVIDIA CUDA, or CPU)
+    device = get_device()
+    print(f"Using device: {device}")
+    
     # Initialize model on available device
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
