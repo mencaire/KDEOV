@@ -1,6 +1,6 @@
 """
-Temporary script to verify CUDA, CLIP, and ultralytics availability
-This script will be deleted after verification
+Environment verification script for CUDA, MPS, CPU, CLIP, and ultralytics
+Supports multiple devices: NVIDIA CUDA, Apple MPS, and CPU
 """
 
 import sys
@@ -9,28 +9,48 @@ print("=" * 60)
 print("Environment Verification Test")
 print("=" * 60)
 
-# Test 1: CUDA availability
-print("\n[1] Testing CUDA availability...")
+# Device detection function
+def get_device():
+    """Detect and return the best available device"""
+    import torch
+    if torch.cuda.is_available():
+        return torch.device("cuda"), "CUDA"
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return torch.device("mps"), "MPS"
+    else:
+        return torch.device("cpu"), "CPU"
+
+# Test 1: Device availability
+print("\n[1] Testing device availability...")
 try:
     import torch
     print(f"  ✓ PyTorch version: {torch.__version__}")
     
-    if torch.cuda.is_available():
-        print(f"  ✓ CUDA is available")
+    device, device_name = get_device()
+    print(f"  ✓ Selected device: {device_name} ({device})")
+    
+    if device_name == "CUDA":
         print(f"  ✓ CUDA version: {torch.version.cuda}")
         print(f"  ✓ Number of GPUs: {torch.cuda.device_count()}")
         print(f"  ✓ Current GPU: {torch.cuda.get_device_name(0)}")
         print(f"  ✓ GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
-        
-        # Test tensor creation on CUDA
-        test_tensor = torch.randn(2, 3).cuda()
-        print(f"  ✓ Successfully created tensor on CUDA: {test_tensor.shape}")
+    elif device_name == "MPS":
+        print(f"  ✓ Apple Metal Performance Shaders (MPS) is available")
+        print(f"  ✓ Using Apple Silicon GPU acceleration")
     else:
-        print("  ✗ CUDA is NOT available")
-        print("  Error: This script requires CUDA support")
-        sys.exit(1)
+        print(f"  ✓ Using CPU (no GPU acceleration available)")
+        if torch.cuda.is_available():
+            print(f"  ⚠ Note: CUDA is available but not selected")
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            print(f"  ⚠ Note: MPS is available but not selected")
+    
+    # Test tensor creation on selected device
+    test_tensor = torch.randn(2, 3).to(device)
+    print(f"  ✓ Successfully created tensor on {device_name}: {test_tensor.shape}")
+    print(f"  ✓ Tensor device: {test_tensor.device}")
+    
 except Exception as e:
-    print(f"  ✗ Error testing CUDA: {e}")
+    print(f"  ✗ Error testing device: {e}")
     sys.exit(1)
 
 # Test 2: CLIP import and basic functionality
@@ -81,28 +101,33 @@ except Exception as e:
     print(f"  ✗ Error testing ultralytics: {e}")
     sys.exit(1)
 
-# Test 4: Integration test - create a simple tensor on CUDA
-print("\n[4] Testing CUDA tensor operations...")
+# Test 4: Integration test - create tensors on selected device
+print("\n[4] Testing tensor operations on selected device...")
 try:
-    # Create tensors on CUDA
-    a = torch.randn(3, 3).cuda()
-    b = torch.randn(3, 3).cuda()
+    # Get device
+    device, device_name = get_device()
+    
+    # Create tensors on selected device
+    a = torch.randn(3, 3).to(device)
+    b = torch.randn(3, 3).to(device)
     c = torch.matmul(a, b)
-    print(f"  ✓ Successfully performed matrix multiplication on CUDA")
+    print(f"  ✓ Successfully performed matrix multiplication on {device_name}")
     print(f"  ✓ Result shape: {c.shape}")
+    print(f"  ✓ Result device: {c.device}")
     
 except Exception as e:
-    print(f"  ✗ Error testing CUDA operations: {e}")
+    print(f"  ✗ Error testing tensor operations: {e}")
     sys.exit(1)
 
 # Final summary
 print("\n" + "=" * 60)
 print("Verification Summary")
 print("=" * 60)
-print("✓ CUDA: Available and working")
+device, device_name = get_device()
+print(f"✓ Device: {device_name} ({device}) - Available and working")
 print("✓ CLIP: Imported and functional")
 print("✓ ultralytics: Imported and functional")
 print("✓ All components are ready for KDEOV project")
 print("=" * 60)
 print("\nEnvironment verification completed successfully!")
-print("You can proceed with model training and inference.")
+print(f"Using device: {device_name} for training and inference.")
