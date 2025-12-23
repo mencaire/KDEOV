@@ -139,14 +139,27 @@ def train_feature_alignment(
 ):
     """
     Train model with feature alignment pretraining
-    
-    Args:
-        model: KDEOV model instance (assumed to be on CUDA)
-        dataloader: DataLoader with (images, texts) pairs
-        num_epochs: Number of training epochs
-        learning_rate: Learning rate
-        save_path: Path to save checkpoint
+    (Modified for Mac MPS / CUDA compatibility)
     """
+    
+    # 自动设置设备 (Mac用mps, N卡用cuda, 都没有用cpu)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    
+    print(f"🚀 Training Configuration:")
+    print(f"   Device: {device}")
+    print(f"   Total Epochs: {num_epochs}")
+    print(f"   Learning Rate: {learning_rate}")
+    print(f"   Batch Size: {dataloader.batch_size}")
+    print("=" * 80)
+
+    # 把模型搬运到正确的设备上
+    model = model.to(device)
+
     # Load CLIP image encoder for teacher embeddings
     model.load_clip_image_encoder()
     
@@ -156,7 +169,7 @@ def train_feature_alignment(
         alignment_weight=1.0,
         distillation_type="cosine",
         temperature=0.07
-    )
+    ).to(device) # Loss 也搬到设备上
     
     # Optimizer (only train student components, not frozen CLIP)
     trainable_params = [
@@ -171,22 +184,13 @@ def train_feature_alignment(
     
     model.train()
     
-    # Track loss history for convergence analysis
+    # Track loss history
     loss_history = {
         'total': [],
         'distillation': [],
         'alignment': []
     }
     best_loss = float('inf')
-    
-    print("=" * 80)
-    print("Training Configuration:")
-    print(f"  Total Epochs: {num_epochs}")
-    print(f"  Learning Rate: {learning_rate}")
-    print(f"  Total Batches per Epoch: {len(dataloader)}")
-    print(f"  Batch Size: {dataloader.batch_size}")
-    print("=" * 80)
-    print()
     
     for epoch in range(num_epochs):
         total_loss = 0.0
@@ -198,6 +202,7 @@ def train_feature_alignment(
         batch_losses = []
         
         for batch_idx, (images, texts) in enumerate(dataloader):
+            # 关键修改：数据搬运使用 .to(device) 而不是 .cuda()
             images = images.to(device)
             texts = texts.to(device)
             
@@ -289,7 +294,7 @@ def train_feature_alignment(
             recent_losses = loss_history['total'][-3:]
             loss_std = torch.tensor(recent_losses).std().item()
             loss_mean = torch.tensor(recent_losses).mean().item()
-            cv = (loss_std / loss_mean) * 100 if loss_mean > 0 else 0  # Coefficient of variation
+            cv = (loss_std / loss_mean) * 100 if loss_mean > 0 else 0
             
             if cv < 1.0:
                 convergence_status = "CONVERGED"
@@ -315,14 +320,6 @@ def train_feature_alignment(
         else:
             print(f"  Best Loss:       {best_loss:8.4f}")
         
-        # Show loss trend over last few epochs
-        if epoch >= 1:
-            print(f"\n  Loss Trend (last {min(5, epoch+1)} epochs):")
-            start_idx = max(0, epoch - 4)
-            for i in range(start_idx, epoch + 1):
-                marker = "*" if i == epoch else " "
-                print(f"    Epoch {i+1:2d}: {loss_history['total'][i]:8.4f} {marker}")
-        
         print("=" * 80)
         print()
         
@@ -342,42 +339,6 @@ def train_feature_alignment(
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': avg_loss,
             }, f"{save_path}_epoch_{epoch+1}.pt")
-    
-    # Final training summary
-    print("=" * 80)
-    print("Training Completed!")
-    print("=" * 80)
-    print(f"  Total Epochs: {num_epochs}")
-    print(f"  Best Loss: {best_loss:.4f} (Epoch {loss_history['total'].index(best_loss) + 1})")
-    print(f"  Final Loss: {loss_history['total'][-1]:.4f}")
-    
-    # Calculate overall improvement
-    if len(loss_history['total']) > 1:
-        initial_loss = loss_history['total'][0]
-        final_loss = loss_history['total'][-1]
-        improvement = ((initial_loss - final_loss) / initial_loss) * 100
-        print(f"  Improvement: {improvement:.2f}% (from {initial_loss:.4f} to {final_loss:.4f})")
-    
-    # Final convergence status
-    if len(loss_history['total']) >= 3:
-        recent_losses = loss_history['total'][-3:]
-        loss_std = torch.tensor(recent_losses).std().item()
-        loss_mean = torch.tensor(recent_losses).mean().item()
-        cv = (loss_std / loss_mean) * 100 if loss_mean > 0 else 0
-        
-        if cv < 1.0:
-            print(f"  Convergence: CONVERGED (CV: {cv:.2f}%)")
-        elif cv < 3.0:
-            print(f"  Convergence: STABILIZING (CV: {cv:.2f}%)")
-        else:
-            print(f"  Convergence: STILL TRAINING (CV: {cv:.2f}%)")
-    
-    print("=" * 80)
-    
-    # Save final training curves
-    if save_path:
-        plot_training_curves(loss_history, save_path, epoch=num_epochs-1)
-        print(f"\nFinal training curves saved!")
 
 
 if __name__ == "__main__":
