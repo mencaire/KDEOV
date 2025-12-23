@@ -23,8 +23,8 @@ Follow these steps to set up the development environment:
 
 1. **Create a conda virtual environment with Python 3.9:**
    ```bash
-   conda create -n kdeov python=3.9
-   conda activate kdeov
+   conda create -n KDEOV python=3.9
+   conda activate KDEOV
    ```
 
 2. **Install PyTorch:**
