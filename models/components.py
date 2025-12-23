@@ -28,8 +28,18 @@ class FrozenCLIPTextEncoder(nn.Module):
         super().__init__()
         self.model_name = model_name
         
-        # Load CLIP model (always on CUDA)
-        clip_model, _ = clip.load(model_name, device="cuda")
+        # 自动检测设备 (支持 Mac MPS, NVIDIA CUDA, 普通 CPU)
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
+            
+        print(f"Loading CLIP Text Encoder on: {self.device}")
+        
+        # Load CLIP model on the correct device
+        clip_model, _ = clip.load(model_name, device=self.device)
         self.text_encoder = clip_model.encode_text
         
         # Freeze all parameters
