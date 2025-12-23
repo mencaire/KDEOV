@@ -289,6 +289,28 @@ This repository contains comprehensive documentation organized into the followin
   - Quick verification: Run before starting training to ensure everything is properly configured
   - No downloads: The script only checks imports and basic functionality without downloading models
 
+#### `test_backbone.py`
+- **Purpose**: Test script for verifying the `LightweightVisualBackbone` component functionality
+- **Functionality**:
+  - Tests import of `LightweightVisualBackbone` from `models.components`
+  - Initializes YOLOv8n backbone model (automatically downloads pretrained weights if needed)
+  - Performs forward pass with dummy input tensor (batch=1, channels=3, height=640, width=640)
+  - Validates output feature shapes and structure
+  - Provides detailed error messages for debugging backbone issues
+- **Usage**:
+  ```bash
+  python test_backbone.py
+  ```
+- **Use Cases**:
+  - Backbone verification: Ensures the YOLO backbone is correctly integrated and functional
+  - Debugging: Helps identify issues with backbone initialization or forward pass
+  - Feature shape validation: Verifies that the backbone outputs expected multi-scale features
+  - First-time setup: Useful for confirming YOLO weights download and model loading
+- **Important Notes**:
+  - First run will automatically download YOLOv8n pretrained weights (`yolov8n.pt`)
+  - The script uses dummy random tensors; replace with real images for actual feature extraction testing
+  - Outputs detailed step-by-step progress and error information for troubleshooting
+
 ### Configuration Files
 
 #### `requirements.txt`
@@ -479,6 +501,10 @@ KDEOV/
 │                                      # Purpose: Verify CUDA, CLIP, and ultralytics availability
 │                                      # Execution: python test_environment.py
 │
+├── test_backbone.py                  # YOLO backbone testing script
+│                                      # Purpose: Test LightweightVisualBackbone component functionality
+│                                      # Execution: python test_backbone.py
+│
 ├── requirements.txt                  # Python dependency package list
 │                                      # Purpose: Define all required Python packages for the project
 │                                      # Usage: pip install -r requirements.txt
@@ -510,6 +536,7 @@ KDEOV/
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
 | `test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_environment.py` |
+| `test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_backbone.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |
