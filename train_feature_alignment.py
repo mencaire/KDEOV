@@ -20,6 +20,9 @@ import numpy as np
 
 from models import KDEOVModel, FeatureAlignmentLoss
 
+# Set device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def plot_training_curves(
     loss_history: Dict[str, list],
@@ -195,8 +198,8 @@ def train_feature_alignment(
         batch_losses = []
         
         for batch_idx, (images, texts) in enumerate(dataloader):
-            images = images.cuda()
-            texts = texts.cuda()
+            images = images.to(device)
+            texts = texts.to(device)
             
             # Forward pass through student model
             student_outputs = model(images=images, text=texts, use_fusion=True)
@@ -379,12 +382,12 @@ def train_feature_alignment(
 
 if __name__ == "__main__":
     # Example usage
-    # Initialize model (automatically on CUDA)
+    # Initialize model on available device
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
         backbone_type="yolov8n",
         fusion_type="film"
-    ).cuda()
+    ).to(device)
     
     # Example: Create a dummy dataset
     # In practice, you would use a real dataset with image-text pairs

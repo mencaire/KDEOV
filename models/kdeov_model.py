@@ -54,9 +54,14 @@ class KDEOVModel(nn.Module):
         
         self.embedding_dim = embedding_dim
         
+        # Get device (will be set when model is moved to device)
+        # For now, default to CUDA if available
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         # Components
         self.text_encoder = FrozenCLIPTextEncoder(
-            model_name=clip_model_name
+            model_name=clip_model_name,
+            device=str(self._device)
         )
         
         self.visual_backbone = LightweightVisualBackbone(
@@ -100,7 +105,9 @@ class KDEOVModel(nn.Module):
         """Load CLIP image encoder for distillation (frozen)"""
         if self.clip_image_encoder is None:
             import clip
-            clip_model, _ = clip.load(self.text_encoder.model_name, device="cuda")
+            # Get device from model parameters
+            device = next(self.parameters()).device
+            clip_model, _ = clip.load(self.text_encoder.model_name, device=str(device))
             self.clip_image_encoder = clip_model.encode_image
             
             # Freeze
@@ -247,7 +254,8 @@ class KDEOVModel(nn.Module):
         
         # Tokenize
         tokenizer = clip.tokenize
-        text_tokens = tokenizer(prompts).cuda()
+        device = next(self.parameters()).device
+        text_tokens = tokenizer(prompts).to(device)
         
         # Encode
         text_embeddings = self.text_encoder(text_tokens)

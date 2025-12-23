@@ -20,16 +20,21 @@ class FrozenCLIPTextEncoder(nn.Module):
     in the CLIP embedding space.
     """
     
-    def __init__(self, model_name: str = "ViT-B/32"):
+    def __init__(self, model_name: str = "ViT-B/32", device: Optional[str] = None):
         """
         Args:
             model_name: CLIP model variant (e.g., "ViT-B/32", "ViT-L/14")
+            device: Device to load CLIP model on (default: "cuda" if available, else "cpu")
         """
         super().__init__()
         self.model_name = model_name
         
-        # Load CLIP model (always on CUDA)
-        clip_model, _ = clip.load(model_name, device="cuda")
+        # Determine device
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # Load CLIP model on specified device
+        clip_model, _ = clip.load(model_name, device=device)
         self.text_encoder = clip_model.encode_text
         
         # Freeze all parameters
