@@ -29,17 +29,32 @@ Follow these steps to set up the development environment:
 
 2. **Install PyTorch:**
    
-   For CUDA (GPU support):
+   **Important**: Choose the installation method based on your GPU's CUDA version. Check your CUDA version first:
    ```bash
-   pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+   nvidia-smi  # Check CUDA version in the top right corner
    ```
    
-   For CPU only:
+   **For CUDA (GPU support):**
+   - For CUDA 11.8:
+     ```bash
+     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+     ```
+   - For CUDA 12.1:
+     ```bash
+     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+     ```
+   - For CUDA 12.6:
+     ```bash
+     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+     ```
+   - Visit [PyTorch official website](https://pytorch.org/get-started/locally/) for other CUDA versions
+   
+   **For CPU only:**
    ```bash
    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
    ```
    
-   Or using conda:
+   **Or using conda:**
    ```bash
    conda install pytorch torchvision -c pytorch
    ```
@@ -49,7 +64,14 @@ Follow these steps to set up the development environment:
    pip install -r requirements.txt
    ```
 
-4. **Install CLIP:**
+4. **Install YOLOv8 (if ultralytics installation fails):**
+   
+   If installing `ultralytics` via pip fails, you can use the alternative method:
+   ```bash
+   pip install git+https://github.com/ultralytics/yolov8.git
+   ```
+
+5. **Install CLIP:**
    ```bash
    pip install git+https://github.com/openai/CLIP.git
    ```
