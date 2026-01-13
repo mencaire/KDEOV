@@ -17,6 +17,16 @@ This Final Year Project (FYP) focuses on knowledge distillation techniques for e
 
 ## Installation
 
+## 📂 Data Preparation (Mini Dataset)
+
+To ensure consistency across development environments (Mac/Linux/Windows), we use the **COCO128** dataset (a small 128-image subset of COCO) for testing and debugging.
+
+**Do not download data manually.** Instead, run the automated script:
+
+```bash
+# This script will create a 'datasets/' folder and download COCO128 automatically
+python download_data.py
+
 ### Environment Setup
 
 Follow these steps to set up the development environment:
