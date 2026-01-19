@@ -321,6 +321,54 @@ This repository contains comprehensive documentation organized into the followin
   - The script uses dummy random tensors; replace with real images for actual feature extraction testing
   - Outputs detailed step-by-step progress and error information for troubleshooting
 
+#### `model_summary.py`
+- **Purpose**: Comprehensive model summary and visualization script for KDEOV model architecture analysis
+- **Functionality**:
+  - **Model Architecture Visualization**: Displays text-based architecture diagram showing data flow through all components
+  - **Parameter Statistics**: Counts and displays total, trainable, and frozen parameters for the entire model and each component
+  - **Component Analysis**: Provides detailed breakdown of each model component (Text Encoder, Visual Backbone, Projection Network, Fusion Module)
+  - **Input/Output Shape Testing**: Automatically tests forward pass and captures all input/output tensor shapes
+  - **Memory Usage Estimation**: Calculates model size in MB (assuming float32 parameters)
+  - **Training Information**: Lists trainable vs frozen components and available loss functions
+  - **Model Comparison**: Compares KDEOV model size with full CLIP model
+  - **Static Summary Mode**: Works even without CLIP installed, showing architecture overview
+- **Usage**:
+  ```bash
+  # Basic usage (default: yolov8n backbone, film fusion)
+  python model_summary.py
+
+  # With specific backbone and fusion type
+  python model_summary.py --backbone yolov5s --fusion cross_attention
+
+  # Static summary only (no model loading, works without dependencies)
+  python model_summary.py --static
+  ```
+- **Command-line Options**:
+  - `--backbone BACKBONE`: Choose backbone type (`yolov8n`, `yolov5s`, or `simple`)
+  - `--fusion FUSION`: Choose fusion type (`film` or `cross_attention`)
+  - `--static`: Show static summary only (no model loading, useful when dependencies are missing)
+- **Use Cases**:
+  - **Model Inspection**: Quickly understand model architecture and parameter distribution
+  - **Debugging**: Verify model structure, parameter counts, and component integration
+  - **Documentation**: Generate model statistics for reports and presentations
+  - **Performance Analysis**: Check trainable vs frozen parameters to understand training efficiency
+  - **Environment Verification**: Test if model can be initialized correctly with current setup
+  - **Architecture Understanding**: Visualize data flow and component relationships
+- **Output Sections**:
+  1. **Model Architecture Diagram**: Visual representation of text and visual streams
+  2. **Overall Statistics**: Total/trainable/frozen parameters, model size, device info
+  3. **Component Details**: Individual component parameter counts and descriptions
+  4. **Input/Output Shapes**: Verified tensor shapes for all model inputs and outputs
+  5. **Training Information**: Trainable components and loss function descriptions
+  6. **Model Size Comparison**: Comparison with full CLIP model
+  7. **Usage Examples**: Quick code snippets for model usage
+- **Important Notes**:
+  - First run will automatically download CLIP and YOLO pretrained weights if needed
+  - The script handles missing dependencies gracefully (shows static summary if CLIP is not installed)
+  - Forward pass testing requires CUDA/CLIP to be available
+  - Parameter counts are accurate and include all submodules
+  - Model size calculation assumes float32 (4 bytes per parameter)
+
 ### Configuration Files
 
 #### `requirements.txt`
@@ -363,14 +411,29 @@ The `test_environment.py` script provides comprehensive verification:
 - Provides immediate feedback if packages are not installed correctly
 - Displays helpful installation instructions if packages are missing
 
-#### 2. Run Example Code
+#### 2. Verify Model Structure (Optional but Recommended)
+
+```bash
+# Generate comprehensive model summary and statistics
+python model_summary.py
+```
+
+This will display:
+- Model architecture diagram
+- Parameter counts (total, trainable, frozen)
+- Component details and descriptions
+- Input/output tensor shapes
+- Training information
+- Model size comparison with CLIP
+
+#### 3. Run Example Code
 
 ```bash
 # Run usage examples (to understand model API)
 python example_usage.py
 ```
 
-#### 3. Initialize Model
+#### 4. Initialize Model
 
 ```python
 import torch
@@ -387,7 +450,7 @@ model = KDEOVModel(
 model.eval()
 ```
 
-#### 4. Zero-Shot Classification
+#### 5. Zero-Shot Classification
 
 ```python
 import clip
@@ -417,7 +480,7 @@ with torch.no_grad():
 print(f"Predicted: {class_names[predicted_idx]} (confidence: {probs[0][predicted_idx]:.4f})")
 ```
 
-#### 5. Text-Image Retrieval
+#### 6. Text-Image Retrieval
 
 ```python
 import clip
@@ -444,7 +507,7 @@ for i, idx in enumerate(top_k_indices):
     print(f"  Rank {i+1}: Image {idx.item()} (similarity: {similarities[idx].item():.4f})")
 ```
 
-#### 6. Model Training
+#### 7. Model Training
 
 ```python
 from train_feature_alignment import train_feature_alignment
@@ -515,6 +578,10 @@ KDEOV/
 │                                      # Purpose: Test LightweightVisualBackbone component functionality
 │                                      # Execution: python test_backbone.py
 │
+├── model_summary.py                  # Model summary and visualization script
+│                                      # Purpose: Comprehensive model architecture analysis and statistics
+│                                      # Execution: python model_summary.py [--backbone BACKBONE] [--fusion FUSION] [--static]
+│
 ├── requirements.txt                  # Python dependency package list
 │                                      # Purpose: Define all required Python packages for the project
 │                                      # Usage: pip install -r requirements.txt
@@ -547,6 +614,7 @@ KDEOV/
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
 | `test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_environment.py` |
 | `test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_backbone.py` |
+| `model_summary.py` | Executable Script | Model architecture analysis and statistics | `python model_summary.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |

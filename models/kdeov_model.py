@@ -170,6 +170,10 @@ class KDEOVModel(nn.Module):
             Dictionary with embeddings and/or similarity scores
         """
         outputs = {}
+        text_embeddings = None
+        if text is not None:
+            text_embeddings = self.text_encoder(text)
+            outputs["text_embeddings"] = text_embeddings
         
         if images is not None:
             # Extract visual features
@@ -177,8 +181,7 @@ class KDEOVModel(nn.Module):
             final_features = visual_features[-1] if isinstance(visual_features, list) else visual_features
             
             # Apply fusion if text is provided
-            if text is not None and use_fusion:
-                text_embeddings = self.text_encoder(text)
+            if text_embeddings is not None and use_fusion:
                 fused_features = self.fusion_module(final_features, text_embeddings)
                 # Project fused features
                 image_embeddings = self.projection(fused_features)
@@ -188,12 +191,8 @@ class KDEOVModel(nn.Module):
             
             outputs["image_embeddings"] = image_embeddings
         
-        if text is not None:
-            text_embeddings = self.text_encoder(text)
-            outputs["text_embeddings"] = text_embeddings
-        
         # Compute similarity if both are provided
-        if images is not None and text is not None:
+        if images is not None and text_embeddings is not None:
             image_emb = outputs["image_embeddings"]
             text_emb = outputs["text_embeddings"]
             

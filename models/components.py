@@ -63,6 +63,9 @@ class FrozenCLIPTextEncoder(nn.Module):
         """
         with torch.no_grad():
             text_features = self.text_encoder(text)
+            # Ensure float32 dtype for compatibility with other model components
+            if text_features.dtype != torch.float32:
+                text_features = text_features.to(dtype=torch.float32)
             # Normalize embeddings
             text_features = F.normalize(text_features, dim=-1)
         return text_features
@@ -95,25 +98,63 @@ class LightweightVisualBackbone(nn.Module):
         super().__init__()
         self.backbone_type = backbone_type
         self.input_size = input_size
+        self.use_yolo = False
+        self.yolo_model = None
+        self._hook_handles = []
+        self._hook_features: List[torch.Tensor] = []
+        self.feature_dims = None
         
         if backbone_type == "yolov8n":
             try:
                 from ultralytics import YOLO
                 yolo_model = YOLO('yolov8n.pt' if pretrained else None)
-                # Extract backbone (first part of the model)
-                self.backbone = yolo_model.model.model[:10]  # Adjust based on actual architecture
-                self.feature_dims = [64, 128, 256, 512]  # Typical YOLOv8 feature dimensions
-            except ImportError:
+                self.yolo_model = yolo_model.model
+                # Ensure YOLO model parameters are trainable
+                for param in self.yolo_model.parameters():
+                    param.requires_grad = True
+                self.use_yolo = True
+                try:
+                    self._register_yolo_hooks(self.yolo_model)
+                except Exception as hook_error:
+                    # If hook registration fails, fall back to simple backbone
+                    print(f"Warning: Failed to register YOLO hooks: {hook_error}")
+                    print("Falling back to simple CNN backbone")
+                    self.use_yolo = False
+                    self.yolo_model = None
+                    self.backbone = self._create_simple_backbone()
+                    self.feature_dims = [64, 128, 256, 512]
+            except (ImportError, Exception) as e:
                 # Fallback: Use a simplified CNN backbone
+                print(f"Warning: Failed to load YOLOv8n: {e}")
+                print("Falling back to simple CNN backbone")
+                self.use_yolo = False
+                self.yolo_model = None
                 self.backbone = self._create_simple_backbone()
                 self.feature_dims = [64, 128, 256, 512]
         elif backbone_type == "yolov5s":
             try:
                 import torch.hub
                 yolo_model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=pretrained)
-                self.backbone = yolo_model.model.model[:23]  # Extract backbone layers
-                self.feature_dims = [64, 128, 256, 512]
-            except Exception:
+                self.yolo_model = yolo_model.model
+                # Ensure YOLO model parameters are trainable
+                for param in self.yolo_model.parameters():
+                    param.requires_grad = True
+                self.use_yolo = True
+                try:
+                    self._register_yolo_hooks(self.yolo_model)
+                except Exception as hook_error:
+                    # If hook registration fails, fall back to simple backbone
+                    print(f"Warning: Failed to register YOLO hooks: {hook_error}")
+                    print("Falling back to simple CNN backbone")
+                    self.use_yolo = False
+                    self.yolo_model = None
+                    self.backbone = self._create_simple_backbone()
+                    self.feature_dims = [64, 128, 256, 512]
+            except Exception as e:
+                print(f"Warning: Failed to load YOLOv5s: {e}")
+                print("Falling back to simple CNN backbone")
+                self.use_yolo = False
+                self.yolo_model = None
                 self.backbone = self._create_simple_backbone()
                 self.feature_dims = [64, 128, 256, 512]
         else:
@@ -150,6 +191,66 @@ class LightweightVisualBackbone(nn.Module):
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
         )
+
+    def _register_yolo_hooks(self, model: nn.Module) -> None:
+        """
+        Register forward hooks to capture intermediate feature maps from YOLO.
+        Recursively registers hooks on Conv2d layers to capture multi-scale features.
+        """
+        def hook_fn(_module, _inputs, output):
+            feature = self._extract_feature_tensor(output)
+            if feature is not None:
+                self._hook_features.append(feature)
+
+        def register_hooks_recursive(module: nn.Module, depth: int = 0, max_depth: int = 10):
+            """Recursively register hooks on Conv2d layers."""
+            if depth > max_depth:
+                return
+            
+            # Register hook on Conv2d layers (these produce feature maps)
+            if isinstance(module, nn.Conv2d):
+                self._hook_handles.append(module.register_forward_hook(hook_fn))
+            
+            # Recursively register on children
+            for child in module.children():
+                register_hooks_recursive(child, depth + 1, max_depth)
+        
+        # Start recursive registration from the model
+        register_hooks_recursive(model, max_depth=15)
+        
+        # Also register on the model itself as fallback
+        if len(self._hook_handles) == 0:
+            self._hook_handles.append(model.register_forward_hook(hook_fn))
+
+    def _extract_feature_tensor(self, output: object) -> Optional[torch.Tensor]:
+        """
+        Extract a 4D tensor feature map from a module output.
+        """
+        if isinstance(output, torch.Tensor) and output.dim() == 4:
+            return output
+        if isinstance(output, (list, tuple)):
+            for item in reversed(output):
+                if isinstance(item, torch.Tensor) and item.dim() == 4:
+                    return item
+        return None
+
+    def _select_multiscale_features(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+        """
+        Select multi-scale features based on unique spatial resolutions.
+        """
+        size_to_feature = {}
+        for feature in features:
+            if not isinstance(feature, torch.Tensor) or feature.dim() != 4:
+                continue
+            size_to_feature[(feature.shape[2], feature.shape[3])] = feature
+        if not size_to_feature:
+            return []
+        sorted_sizes = sorted(
+            size_to_feature.keys(),
+            key=lambda size: size[0] * size[1],
+            reverse=True
+        )
+        return [size_to_feature[size] for size in sorted_sizes[:4]]
     
     def forward(self, images: torch.Tensor) -> List[torch.Tensor]:
         """
@@ -161,9 +262,34 @@ class LightweightVisualBackbone(nn.Module):
         Returns:
             List of feature maps at different scales
         """
+        if self.use_yolo and self.yolo_model is not None:
+            try:
+                self._hook_features = []
+                _ = self.yolo_model(images)
+                features = self._select_multiscale_features(self._hook_features)
+                if not features:
+                    # If no features captured, try to use the last hook feature
+                    if len(self._hook_features) > 0:
+                        features = [self._hook_features[-1]]
+                    else:
+                        # If still no features, fall back to simple backbone
+                        # This shouldn't happen, but handle it gracefully
+                        raise ValueError("No features captured from YOLO hooks")
+                return features
+            except Exception as e:
+                # If YOLO forward fails, fall back to simple backbone
+                print(f"Warning: YOLO forward pass failed: {e}")
+                print("Falling back to simple CNN backbone")
+                self.use_yolo = False
+                # Continue to simple backbone processing below
+
+        # Simple CNN backbone processing
+        if not hasattr(self, 'backbone') or self.backbone is None:
+            self.backbone = self._create_simple_backbone()
+            self.feature_dims = [64, 128, 256, 512]
+        
         features = []
         x = images
-        
         # Extract features at different scales
         for i, layer in enumerate(self.backbone):
             x = layer(x)
@@ -328,22 +454,12 @@ class CrossModalFusionModule(nn.Module):
         film_params = self.film_generator(text_embeddings)
         scale, shift = torch.chunk(film_params, 2, dim=-1)
         
-        # If dimensions don't match, create or use projection layers
         if scale.shape[-1] != actual_image_dim:
-            # Create projection layers if they don't exist or dimensions changed
-            proj_key = f'_film_proj_{scale.shape[-1]}_to_{actual_image_dim}'
-            if not hasattr(self, proj_key):
-                # Create and register as buffer/parameter so it's part of the model
-                scale_proj = nn.Linear(scale.shape[-1], actual_image_dim).to(scale.device).to(scale.dtype)
-                shift_proj = nn.Linear(shift.shape[-1], actual_image_dim).to(shift.device).to(shift.dtype)
-                # Register as submodules so they're part of the model
-                self.add_module(f'film_scale_proj_{scale.shape[-1]}_{actual_image_dim}', scale_proj)
-                self.add_module(f'film_shift_proj_{shift.shape[-1]}_{actual_image_dim}', shift_proj)
-                setattr(self, proj_key, (scale_proj, shift_proj))
-            
-            scale_proj, shift_proj = getattr(self, proj_key)
-            scale = scale_proj(scale)
-            shift = shift_proj(shift)
+            raise ValueError(
+                "FiLM dimension mismatch: expected image feature channels "
+                f"{scale.shape[-1]}, got {actual_image_dim}. "
+                "Ensure image_dim matches backbone output channels."
+            )
         
         # Expand to match image feature spatial dimensions
         original_shape = image_features.shape
