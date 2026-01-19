@@ -19,6 +19,8 @@ Options:
 
 import torch
 import torch.nn as nn
+import ssl  
+ssl._create_default_https_context = ssl._create_unverified_context
 from typing import Dict, List, Tuple, Optional
 import sys
 import os
