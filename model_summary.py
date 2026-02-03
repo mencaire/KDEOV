@@ -533,34 +533,6 @@ def main():
     # Print comparison
     print_model_comparison()
     
-    # Print usage example
-    print_section("Quick Usage Example", width=80)
-    usage_example = """
-    from models import KDEOVModel
-    import torch
-    import clip
-    
-    # Initialize model
-    model = KDEOVModel(
-        clip_model_name="ViT-B/32",
-        backbone_type="yolov8n",
-        fusion_type="film"
-    ).to(device)
-    
-    # Encode images
-    images = torch.randn(4, 3, 224, 224).to(device)
-    image_emb = model.encode_image(images)
-    
-    # Encode text
-    text = clip.tokenize(["a photo of a cat"]).to(device)
-    text_emb = model.encode_text(text)
-    
-    # Zero-shot classification
-    class_names = ["cat", "dog", "bird"]
-    logits = model.zero_shot_classify(images, class_names)
-    """
-    print(usage_example)
-    
     print("\n" + "=" * 80)
     print(" Summary Complete! ".center(80))
     print("=" * 80 + "\n")
