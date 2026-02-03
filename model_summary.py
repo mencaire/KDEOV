@@ -479,6 +479,13 @@ def main():
         print_static_summary()
         return
     
+    # Weights directory: YOLO .pt and related weights are saved here
+    weights_dir = os.path.join(os.getcwd(), "weights")
+    os.makedirs(weights_dir, exist_ok=True)
+    # torch.hub (e.g. yolov5s) uses TORCH_HOME; point it under weights/
+    os.environ["TORCH_HOME"] = os.path.join(weights_dir, "torch_hub")
+    print(f"\n[OK] Weights directory: {weights_dir}")
+    
     # Get device
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -499,7 +506,8 @@ def main():
             clip_model_name="ViT-B/32",
             backbone_type=args.backbone,
             fusion_type=args.fusion,
-            embedding_dim=512
+            embedding_dim=512,
+            weights_dir=weights_dir
         )
         print("[OK] Model initialized successfully!")
     except Exception as e:
@@ -511,7 +519,8 @@ def main():
                     clip_model_name="ViT-B/32",
                     backbone_type="simple",  # Will use fallback
                     fusion_type=args.fusion,
-                    embedding_dim=512
+                    embedding_dim=512,
+                    weights_dir=weights_dir
                 )
                 print("[OK] Model initialized with fallback backbone!")
             except Exception as e2:

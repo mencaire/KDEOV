@@ -4,6 +4,7 @@ Implements: Frozen CLIP Text Encoder, Lightweight Visual Backbone,
 Projection Network, and Cross-Modal Fusion Module
 """
 
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -87,13 +88,15 @@ class LightweightVisualBackbone(nn.Module):
         self,
         backbone_type: str = "yolov8n",  # or "yolov5s"
         pretrained: bool = True,
-        input_size: int = 640
+        input_size: int = 640,
+        weights_dir: Optional[str] = None
     ):
         """
         Args:
             backbone_type: Type of YOLO backbone ("yolov8n" or "yolov5s")
             pretrained: Whether to use pretrained weights
             input_size: Input image size
+            weights_dir: Directory to save/load YOLO weights (e.g. "weights"). If set, yolov8n.pt etc. are stored here.
         """
         super().__init__()
         self.backbone_type = backbone_type
@@ -107,7 +110,12 @@ class LightweightVisualBackbone(nn.Module):
         if backbone_type == "yolov8n":
             try:
                 from ultralytics import YOLO
-                yolo_model = YOLO('yolov8n.pt' if pretrained else None)
+                if pretrained and weights_dir:
+                    os.makedirs(weights_dir, exist_ok=True)
+                    yolo_weights_path = os.path.join(weights_dir, "yolov8n.pt")
+                else:
+                    yolo_weights_path = "yolov8n.pt" if pretrained else None
+                yolo_model = YOLO(yolo_weights_path)
                 self.yolo_model = yolo_model.model
                 # Ensure YOLO model parameters are trainable
                 for param in self.yolo_model.parameters():
@@ -134,6 +142,7 @@ class LightweightVisualBackbone(nn.Module):
         elif backbone_type == "yolov5s":
             try:
                 import torch.hub
+                # yolov5s uses torch.hub; set TORCH_HOME in caller (e.g. model_summary) to save under weights/
                 yolo_model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=pretrained)
                 self.yolo_model = yolo_model.model
                 # Ensure YOLO model parameters are trainable

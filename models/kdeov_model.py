@@ -41,7 +41,8 @@ class KDEOVModel(nn.Module):
         clip_model_name: str = "ViT-B/32",
         backbone_type: str = "yolov8n",
         fusion_type: str = "film",
-        embedding_dim: int = 512
+        embedding_dim: int = 512,
+        weights_dir: Optional[str] = None
     ):
         """
         Args:
@@ -49,6 +50,7 @@ class KDEOVModel(nn.Module):
             backbone_type: YOLO backbone type ("yolov8n" or "yolov5s")
             fusion_type: Fusion module type ("film" or "cross_attention")
             embedding_dim: Embedding dimension (should match CLIP)
+            weights_dir: Directory to save/load backbone weights (e.g. "weights"). YOLO .pt files go here.
         """
         super().__init__()
         
@@ -71,7 +73,8 @@ class KDEOVModel(nn.Module):
         
         self.visual_backbone = LightweightVisualBackbone(
             backbone_type=backbone_type,
-            pretrained=True
+            pretrained=True,
+            weights_dir=weights_dir
         )
         
         # Dynamically get actual feature dimension from backbone
