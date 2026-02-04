@@ -15,6 +15,17 @@ This Final Year Project (FYP) focuses on knowledge distillation techniques for e
 - Lightweight model optimization
 - Semantic alignment transfer
 
+### Current Model Structure (High Level)
+
+The KDEOV model has a **text stream** and a **visual stream** with two output paths:
+
+- **Text stream**: Frozen CLIP Text Encoder → text embeddings.
+- **Visual stream**: Lightweight Visual Backbone (YOLOv8n/YOLOv5s or simple CNN) → multi-scale features → optional Cross-Modal Fusion (FiLM or cross-attention) with text. Then:
+  - **Classification / retrieval path**: Projection Network (global pooling) → image embeddings; used for zero-shot classification and text-image retrieval.
+  - **Detection path**: Spatial Projection (no pooling) → per-location embeddings; similarity with class-name text + grid default boxes + NMS → open-vocabulary object detection (boxes, scores, labels).
+
+See **[models/README.md](./models/README.md)** for detailed architecture and API.
+
 ## Installation
 
 ## Data Preparation (Mini Dataset)
@@ -97,21 +108,23 @@ The first term has been primarily dedicated to **theoretical research** and foun
 - **Problem Analysis**: Analysis of challenges and opportunities in efficient open-vocabulary vision
 - **Research Proposal**: Detailed research proposal outlining the project scope, methodology, and expected contributions
 
-### Winter Vocations (In Progress) - Implementation Phase
+### Winter Vocations - Implementation Phase
 
 **Model Implementation (Completed):**
 - ✅ **Core Model Components**: Implemented all key components of the KDEOV architecture
   - Frozen CLIP Text Encoder (`FrozenCLIPTextEncoder`)
   - Lightweight Visual Backbone (`LightweightVisualBackbone`) with YOLOv8n/YOLOv5s support
-  - Projection Network (`ProjectionNetwork`) for feature alignment
+  - Projection Network (`ProjectionNetwork`) for image-level feature alignment (classification/retrieval path)
   - Cross-Modal Fusion Module (`CrossModalFusionModule`) with FiLM and Cross-Attention support
+  - Spatial Projection (`SpatialProjection`) for per-location embeddings (open-vocabulary detection path)
+- ✅ **Dual-path visual output**: Shared backbone + fusion, then (1) Projection Network → image embeddings for zero-shot classification and retrieval; (2) Spatial Projection → spatial embeddings for open-vocabulary object detection (boxes, scores, labels).
 - ✅ **Loss Functions**: Implemented comprehensive loss functions
   - Distillation Loss (Cosine and L2 variants)
   - Cross-Modal Alignment Loss (InfoNCE-based)
   - Feature Alignment Loss (combined loss for end-to-end training)
-- ✅ **Main Model**: Complete `KDEOVModel` class with full training and inference interface
+- ✅ **Main Model**: Complete `KDEOVModel` class with full training and inference interface, including `open_vocabulary_detect()` and `get_spatial_embeddings()`.
 - ✅ **Training Script**: Feature alignment pretraining script (`train_feature_alignment.py`)
-- ✅ **Usage Examples**: Example scripts demonstrating zero-shot classification, text-image retrieval, and forward pass
+- ✅ **Usage Examples**: Zero-shot classification, text-image retrieval, forward pass, and open-vocabulary detection (see Usage Guide and `models/README.md`)
 
 **Environment Setup (Completed):**
 - ✅ Conda environment configuration (Python 3.9)
@@ -170,8 +183,9 @@ This repository contains comprehensive documentation organized into the followin
   - `KDEOVModel` - Main model class
   - `FrozenCLIPTextEncoder` - Frozen CLIP text encoder
   - `LightweightVisualBackbone` - Lightweight visual backbone network
-  - `ProjectionNetwork` - Projection network
+  - `ProjectionNetwork` - Projection network (classification/retrieval path)
   - `CrossModalFusionModule` - Cross-modal fusion module
+  - `SpatialProjection` - Per-location projection (detection path); `grid_boxes_to_image` - detection utility
   - `DistillationLoss`, `CrossModalAlignmentLoss`, `FeatureAlignmentLoss` - Loss functions
 
 #### `models/components.py`
@@ -179,17 +193,20 @@ This repository contains comprehensive documentation organized into the followin
 - **Components**:
   - `FrozenCLIPTextEncoder` - Utilizes pretrained CLIP text encoder
   - `LightweightVisualBackbone` - YOLOv8n/YOLOv5s visual backbone network
-  - `ProjectionNetwork` - Feature projection network
+  - `ProjectionNetwork` - Feature projection with global pooling (image-level embeddings)
   - `CrossModalFusionModule` - FiLM or Cross-Attention fusion module
+  - `SpatialProjection` - 1×1 conv + GroupNorm, preserves spatial dims for detection; `grid_boxes_to_image` for default boxes
 - **Usage**: Typically used indirectly through `KDEOVModel`, but can be imported separately for custom model implementations
 
 #### `models/kdeov_model.py`
-- **Purpose**: Main model class integrating all components
+- **Purpose**: Main model class integrating all components; dual-path output (classification/retrieval and detection).
 - **Key Functionalities**:
   - Model initialization and configuration
-  - Image and text encoding
-  - Zero-shot classification
-  - Text-image retrieval
+  - Image and text encoding (`encode_image`, `encode_text`)
+  - Zero-shot classification (`zero_shot_classify`)
+  - Text-image retrieval (similarity via `compute_similarity`)
+  - Open-vocabulary object detection (`open_vocabulary_detect`) — returns boxes, scores, labels per image
+  - Spatial embeddings for detection (`get_spatial_embeddings`)
   - Forward propagation and feature extraction
 - **Usage**:
   ```python
@@ -325,14 +342,14 @@ This repository contains comprehensive documentation organized into the followin
 #### `model_summary.py`
 - **Purpose**: Comprehensive model summary and visualization script for KDEOV model architecture analysis
 - **Functionality**:
-  - **Model Architecture Visualization**: Displays text-based architecture diagram showing data flow through all components
-  - **Parameter Statistics**: Counts and displays total, trainable, and frozen parameters for the entire model and each component
-  - **Component Analysis**: Provides detailed breakdown of each model component (Text Encoder, Visual Backbone, Projection Network, Fusion Module)
-  - **Input/Output Shape Testing**: Automatically tests forward pass and captures all input/output tensor shapes
+  - **Model Architecture Visualization**: Displays text-based architecture diagram showing data flow through all components, including the dual-path design (Projection Network for classification/retrieval, Spatial Projection for open-vocabulary detection)
+  - **Parameter Statistics**: Counts and displays total, trainable, and frozen parameters for the entire model and each component (including Spatial Projection)
+  - **Component Analysis**: Provides detailed breakdown of each model component (Text Encoder, Visual Backbone, Projection Network, Fusion Module, Spatial Projection)
+  - **Input/Output Shape Testing**: Automatically tests forward pass and captures input/output tensor shapes (image/text embeddings, zero-shot logits, spatial embeddings, and detection boxes/scores/labels when available)
   - **Memory Usage Estimation**: Calculates model size in MB (assuming float32 parameters)
   - **Training Information**: Lists trainable vs frozen components and available loss functions
   - **Model Comparison**: Compares KDEOV model size with full CLIP model
-  - **Static Summary Mode**: Works even without CLIP installed, showing architecture overview
+  - **Static Summary Mode**: Works even without CLIP installed, showing architecture overview and both visual output paths
 - **Usage**:
   ```bash
   # Basic usage (default: yolov8n backbone, film fusion)
@@ -356,13 +373,13 @@ This repository contains comprehensive documentation organized into the followin
   - **Environment Verification**: Test if model can be initialized correctly with current setup
   - **Architecture Understanding**: Visualize data flow and component relationships
 - **Output Sections**:
-  1. **Model Architecture Diagram**: Visual representation of text and visual streams
+  1. **Model Architecture Diagram**: Visual representation of text and visual streams and dual-path output (Projection Network vs Spatial Projection)
   2. **Overall Statistics**: Total/trainable/frozen parameters, model size, device info
-  3. **Component Details**: Individual component parameter counts and descriptions
-  4. **Input/Output Shapes**: Verified tensor shapes for all model inputs and outputs
+  3. **Component Details**: Individual component parameter counts (including Spatial Projection) and descriptions
+  4. **Input/Output Shapes**: Verified tensor shapes for image/text embeddings, zero-shot logits, spatial embeddings, and detection outputs
   5. **Training Information**: Trainable components and loss function descriptions
   6. **Model Size Comparison**: Comparison with full CLIP model
-  7. **Usage Examples**: Quick code snippets for model usage
+  7. **Usage Examples**: Quick code snippets for model usage (including open-vocabulary detection)
 - **Important Notes**:
   - First run will automatically download CLIP and YOLO pretrained weights if needed
   - The script handles missing dependencies gracefully (shows static summary if CLIP is not installed)
@@ -508,7 +525,33 @@ for i, idx in enumerate(top_k_indices):
     print(f"  Rank {i+1}: Image {idx.item()} (similarity: {similarities[idx].item():.4f})")
 ```
 
-#### 7. Model Training
+#### 7. Open-Vocabulary Object Detection
+
+```python
+# Same image preprocessing as above (e.g. transform, image_tensor [1, 3, 224, 224])
+# Define open-vocabulary class names (any text labels)
+class_names = ["person", "car", "dog", "bus", "bicycle"]
+
+with torch.no_grad():
+    detections = model.open_vocabulary_detect(
+        image_tensor,
+        class_names=class_names,
+        score_threshold=0.2,
+        nms_threshold=0.5,
+        max_detections_per_image=50,
+    )
+
+# detections is a list of dicts (one per image)
+for i, det in enumerate(detections):
+    boxes = det["boxes"]   # [N, 4] in xyxy format (x1, y1, x2, y2)
+    scores = det["scores"] # [N]
+    labels = det["labels"] # list of N class name strings
+    print(f"Image {i}: {len(labels)} detections")
+    for box, score, label in zip(boxes, scores, labels):
+        print(f"  {label}: {score:.2f} @ {box.tolist()}")
+```
+
+#### 8. Model Training
 
 ```python
 from train_feature_alignment import train_feature_alignment
@@ -549,7 +592,10 @@ train_feature_alignment(
 1. **Environment Preparation**: Activate conda environment and ensure all dependencies are installed
 2. **Model Initialization**: Create `KDEOVModel` instance with selected configuration parameters
 3. **Data Preparation**: Prepare image and text data (for training or inference)
-4. **Model Inference**: Call appropriate methods (zero-shot classification, retrieval, etc.)
+4. **Model Inference**: Call appropriate methods:
+   - **Zero-shot classification**: `zero_shot_classify(images, class_names)`
+   - **Text-image retrieval**: `encode_image`, `encode_text`, `compute_similarity`
+   - **Open-vocabulary detection**: `open_vocabulary_detect(images, class_names, ...)` → boxes, scores, labels
 5. **Model Training** (Optional): Use training script for feature alignment pretraining
 
 ## Repository Structure

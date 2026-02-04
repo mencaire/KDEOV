@@ -374,6 +374,79 @@ class ProjectionNetwork(nn.Module):
         return embeddings
 
 
+class SpatialProjection(nn.Module):
+    """
+    Spatial Projection for Open-Vocabulary Detection
+
+    Projects backbone feature maps to CLIP embedding space while preserving
+    spatial dimensions, so each location has an embedding for region-text similarity.
+    Uses 1x1 conv + GroupNorm; no global pooling.
+    """
+
+    def __init__(self, input_dim: int, output_dim: int = 512):
+        super().__init__()
+        self.proj = nn.Sequential(
+            nn.Conv2d(input_dim, output_dim, kernel_size=1),
+            nn.GroupNorm(1, output_dim),  # normalize over channels per spatial location
+        )
+
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            image_features: [batch_size, C, H, W]
+
+        Returns:
+            [batch_size, output_dim, H, W], L2-normalized along channel dim
+        """
+        out = self.proj(image_features)
+        # Normalize per spatial location (dim=1 is channel)
+        out = F.normalize(out, dim=1)
+        return out
+
+
+def grid_boxes_to_image(
+    feat_h: int,
+    feat_w: int,
+    img_h: int,
+    img_w: int,
+    cell_scale: float = 2.0,
+    device: Optional[torch.device] = None,
+) -> torch.Tensor:
+    """
+    Map feature grid indices to image-space boxes (xyxy format).
+
+    Each cell (i, j) gets one default box: center at ((j+0.5)*stride_x, (i+0.5)*stride_y),
+    size = (stride_x * cell_scale, stride_y * cell_scale). stride = image_size / feature_size.
+
+    Args:
+        feat_h, feat_w: Feature map height and width
+        img_h, img_w: Image height and width
+        cell_scale: Scale factor for default box size (e.g. 2.0 = overlapping cells)
+        device: Device for the output tensor
+
+    Returns:
+        Boxes tensor [feat_h * feat_w, 4] in xyxy format (x1, y1, x2, y2)
+    """
+    stride_y = img_h / max(feat_h, 1)
+    stride_x = img_w / max(feat_w, 1)
+    half_h = (stride_y * cell_scale) / 2
+    half_w = (stride_x * cell_scale) / 2
+    ys = torch.arange(feat_h, dtype=torch.float32, device=device)
+    xs = torch.arange(feat_w, dtype=torch.float32, device=device)
+    cy = (ys + 0.5) * stride_y
+    cx = (xs + 0.5) * stride_x
+    grid_cy, grid_cx = torch.meshgrid(cy, cx, indexing="ij")
+    # clamp centers to image
+    grid_cy = grid_cy.clamp(0, img_h - 1e-4)
+    grid_cx = grid_cx.clamp(0, img_w - 1e-4)
+    x1 = (grid_cx - half_w).clamp(0, img_w)
+    x2 = (grid_cx + half_w).clamp(0, img_w)
+    y1 = (grid_cy - half_h).clamp(0, img_h)
+    y2 = (grid_cy + half_h).clamp(0, img_h)
+    boxes = torch.stack([x1, y1, x2, y2], dim=-1).view(-1, 4)
+    return boxes
+
+
 class CrossModalFusionModule(nn.Module):
     """
     Cross-Modal Fusion Module

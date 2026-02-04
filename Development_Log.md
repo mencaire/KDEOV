@@ -2,6 +2,55 @@
 
 ## Implementation Phase
 
+### 2026/02/04 Peng - 开放词汇目标检测实现与文档更新
+
+#### 主要工作内容
+
+1. **开放词汇目标检测（Open-Vocabulary Object Detection）实现**
+   - 在 `models/components.py` 中新增 **SpatialProjection**：1×1 卷积 + GroupNorm，将 backbone 特征图映射到 CLIP 嵌入空间并**保留空间维度**（不做全局池化），输出形状 `[B, 512, Hf, Wf]`，用于每个位置与文本的相似度计算
+   - 新增 **grid_boxes_to_image** 工具函数：将特征图网格映射到图像坐标的默认框（xyxy 格式），供检测头使用
+   - 在 `models/kdeov_model.py` 中新增 **get_spatial_embeddings()**：获取每位置图像嵌入（可选与文本融合）
+   - 新增 **open_vocabulary_detect()**：输入图像和类别名称列表，输出每张图的检测结果（boxes、scores、labels）；流程为：编码类别文本 → 空间嵌入 → 与类别嵌入相似度 → 网格默认框 → 阈值 + NMS（使用 torchvision.ops.nms）→ 返回检测列表
+   - 模型形成**双路径**：分类/检索路径使用 Projection Network（全局池化）；检测路径使用 Spatial Projection（保留空间），共享 backbone 与 Fusion Module
+
+2. **model_summary.py 更新**
+   - **analyze_model_components**：增加 spatial_projection 组件的统计与描述
+   - **架构图**：更新为双路径结构（Projection Network 与 Spatial Projection 分支），并标注分类/检索与开放词汇检测两条输出
+   - **test_forward_pass**：增加 get_spatial_embeddings 与 open_vocabulary_detect 的 shape 测试（检测部分用 try-except 包裹，避免缺少 torchvision 时报错）
+   - **print_detailed_summary**：输出中增加空间嵌入与检测结果的 shape；训练组件列表中标明 Projection Network（分类/检索路径）与 Spatial Projection（检测路径）
+   - **print_static_summary**：增加第 5 组件 SpatialProjection 的说明及“两条视觉输出路径”描述，更新参数与体积估算；使用示例中增加 open_vocabulary_detect 调用
+
+3. **models/README.md 更新**
+   - 开头增加**当前模型结构概要**：文本流、视觉流及两条路径（分类/检索 vs 检测）
+   - **Model Components** 增加 **§5. Spatial Projection**：作用、输入输出形状、与 Projection Network 的区分
+   - **Architecture Details** 增加 **Model Structure Overview** 表格：两条路径的用途与输出
+   - **Inference Flow** 拆分为：图像级（Projection Network → 图像嵌入 → 相似度）与开放词汇检测（Spatial Projection → 每位置嵌入 → 与类别文本相似度 + 网格框 + NMS）
+
+4. **主项目 README.md 更新**
+   - **Project Overview** 下增加 **Current Model Structure (High Level)**，简述双路径并链接至 models/README.md
+   - **Current Progress - Model Implementation**：补充 Spatial Projection、双路径描述、open_vocabulary_detect / get_spatial_embeddings
+   - **Core Model Files**：`__init__.py` 导出 SpatialProjection、grid_boxes_to_image；components.py、kdeov_model.py 的功能说明与“关键功能”列表更新为包含检测
+   - **model_summary.py** 描述更新：架构图、组件分析、输入输出形状、输出章节均体现双路径与检测
+   - **Usage Guide** 新增 **§7. Open-Vocabulary Object Detection**：完整示例（open_vocabulary_detect 参数与结果解析）
+   - **Model Execution Workflow**：推理步骤中明确列出零样本分类、检索与开放词汇检测
+
+5. **包导出**
+   - 在 `models/__init__.py` 中导出 `SpatialProjection` 与 `grid_boxes_to_image`
+
+#### 技术细节
+
+- **SpatialProjection**：Conv2d(1×1) + GroupNorm，再在通道维做 L2 归一化，输出 `[B, D, Hf, Wf]`
+- **默认框**：每个特征网格单元对应一个框，中心为 `(j+0.5)*stride_x`, `(i+0.5)*stride_y`，尺寸由 `cell_scale` 控制
+- **检测后处理**：先按 score_threshold 过滤，再 class-agnostic NMS；若无 torchvision.ops.nms 则仅做 top-k 截断
+
+#### 成果
+
+- ✅ 模型支持开放词汇目标检测，可通过 `open_vocabulary_detect(images, class_names, ...)` 得到 boxes、scores、labels
+- ✅ 模型结构文档（models/README.md、主 README.md）与当前双路径设计一致
+- ✅ model_summary.py 可展示双路径架构及检测相关 shape，静态摘要含 Spatial Projection 与检测用法
+
+---
+
 ### 2026/01/19 Peng - 模型结构检查和可视化工具开发
 
 #### 主要工作内容

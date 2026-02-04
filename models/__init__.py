@@ -8,7 +8,9 @@ from .components import (
     FrozenCLIPTextEncoder,
     LightweightVisualBackbone,
     ProjectionNetwork,
-    CrossModalFusionModule
+    CrossModalFusionModule,
+    SpatialProjection,
+    grid_boxes_to_image,
 )
 from .losses import (
     DistillationLoss,
@@ -22,6 +24,8 @@ __all__ = [
     'LightweightVisualBackbone',
     'ProjectionNetwork',
     'CrossModalFusionModule',
+    'SpatialProjection',
+    'grid_boxes_to_image',
     'DistillationLoss',
     'CrossModalAlignmentLoss',
     'FeatureAlignmentLoss',

@@ -154,6 +154,14 @@ def analyze_model_components(model: KDEOVModel) -> Dict:
         'description': f'Cross-modal fusion ({model.fusion_module.fusion_type})'
     }
     
+    # Spatial Projection (for open-vocabulary detection)
+    components_info['spatial_projection'] = {
+        'name': 'SpatialProjection',
+        'module': model.spatial_projection,
+        'frozen': False,
+        'description': 'Per-location projection to embedding space (no global pooling) for detection'
+    }
+    
     return components_info
 
 
@@ -197,6 +205,22 @@ def test_forward_pass(model: KDEOVModel, device: torch.device) -> Dict:
         class_names = ["cat", "dog", "bird"]
         logits = model.zero_shot_classify(images[:1], class_names)
         shapes['zero_shot_logits'] = logits.shape
+        
+        # Test spatial embeddings (detection path)
+        spatial_emb = model.get_spatial_embeddings(images, use_fusion=False)
+        shapes['spatial_embeddings'] = spatial_emb.shape
+        
+        # Test open-vocabulary detection (optional; may fail if e.g. torchvision.ops missing)
+        try:
+            detections = model.open_vocabulary_detect(
+                images[:1], class_names=class_names,
+                score_threshold=0.1, max_detections_per_image=5
+            )
+            shapes['detection_boxes'] = detections[0]['boxes'].shape
+            shapes['detection_scores'] = detections[0]['scores'].shape
+            shapes['detection_labels_count'] = len(detections[0]['labels'])
+        except Exception:
+            pass  # detection test optional
     
     return shapes
 
@@ -206,9 +230,9 @@ def print_architecture_diagram(model: KDEOVModel):
     print_section("Model Architecture Diagram", width=80)
     
     diagram = f"""
-    ┌─────────────────────────────────────────────────────────────┐
-    │                    KDEOV Model Architecture                  │
-    └─────────────────────────────────────────────────────────────┘
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                     KDEOV Model Architecture                             │
+    └─────────────────────────────────────────────────────────────────────────┘
     
     Text Stream (Frozen):
     ┌─────────────────┐
@@ -217,7 +241,7 @@ def print_architecture_diagram(model: KDEOVModel):
              │
              ▼
     ┌─────────────────┐
-    │ Frozen CLIP     │  🔒 FROZEN
+    │ Frozen CLIP     │  FROZEN
     │ Text Encoder    │
     └────────┬────────┘
              │
@@ -226,15 +250,14 @@ def print_architecture_diagram(model: KDEOVModel):
     │ Text Embeddings │  [batch, {model.embedding_dim}]
     └─────────────────┘
     
-    Visual Stream (Trainable):
+    Visual Stream (Trainable) - shared backbone and fusion, then two paths:
     ┌─────────────────┐
     │  Image Input    │  [batch, 3, H, W]
     └────────┬────────┘
              │
              ▼
     ┌─────────────────┐
-    │ Visual Backbone │  🔓 TRAINABLE
-    │ ({model.visual_backbone.backbone_type}) │
+    │ Visual Backbone  │  TRAINABLE ({model.visual_backbone.backbone_type})
     └────────┬────────┘
              │
              ▼
@@ -245,27 +268,30 @@ def print_architecture_diagram(model: KDEOVModel):
              │
              ▼
     ┌─────────────────┐
-    │ Fusion Module   │  🔓 TRAINABLE
-    │ ({model.fusion_module.fusion_type}) │
-    │ (optional)      │
+    │ Fusion Module   │  TRAINABLE ({model.fusion_module.fusion_type}, optional)
     └────────┬────────┘
              │
-             ▼
-    ┌─────────────────┐
-    │ Projection      │  🔓 TRAINABLE
-    │ Network         │
-    └────────┬────────┘
-             │
-             ▼
-    ┌─────────────────┐
-    │ Image Embeddings│  [batch, {model.embedding_dim}]
-    └─────────────────┘
-    
-    Output:
-    ┌─────────────────┐
-    │ Similarity      │  Cosine similarity between
-    │ Computation    │  image and text embeddings
-    └─────────────────┘
+       ┌─────┴─────┐
+       │           │
+       ▼           ▼
+    ┌──────────────────┐   ┌──────────────────┐
+    │ Projection       │   │ Spatial           │   TRAINABLE
+    │ Network          │   │ Projection        │
+    │ (global pool)    │   │ (no pool)         │
+    └────────┬─────────┘   └────────┬──────────┘
+             │                      │
+             ▼                      ▼
+    ┌──────────────────┐   ┌──────────────────┐
+    │ Image Embeddings  │   │ Spatial Embeddings│  [batch, {model.embedding_dim}, Hf, Wf]
+    │ [batch, {model.embedding_dim}] │   │ (per-location)     │
+    └────────┬─────────┘   └────────┬──────────┘
+             │                      │
+             ▼                      ▼
+    ┌──────────────────┐   ┌──────────────────┐
+    │ Classification / │   │ Open-vocabulary  │
+    │ retrieval        │   │ detection        │  boxes, scores, labels
+    │ (similarity)     │   │ (grid + NMS)      │
+    └──────────────────┘   └──────────────────┘
     """
     print(diagram)
 
@@ -321,6 +347,14 @@ def print_detailed_summary(model: KDEOVModel, device: torch.device):
         print(f"\n[ZERO-SHOT] Zero-shot Classification:")
         print(f"  Logits shape: {shapes['zero_shot_logits']}")
         
+        if 'spatial_embeddings' in shapes:
+            print(f"\n[DETECTION] Open-vocabulary detection path:")
+            print(f"  Spatial embeddings: {shapes['spatial_embeddings']}")
+            if 'detection_boxes' in shapes:
+                print(f"  Detection boxes (image 0): {shapes['detection_boxes']}")
+                print(f"  Detection scores (image 0): {shapes['detection_scores']}")
+                print(f"  Detection labels count (image 0): {shapes['detection_labels_count']}")
+        
     except Exception as e:
         print(f"[WARNING] Could not test forward pass: {e}")
         print("   This is normal if CUDA/CLIP is not available")
@@ -329,7 +363,8 @@ def print_detailed_summary(model: KDEOVModel, device: torch.device):
     print_section("Training Information", width=80)
     print("\n[TRAINING] Training Components:")
     print("  [OK] Visual Backbone: Trainable")
-    print("  [OK] Projection Network: Trainable")
+    print("  [OK] Projection Network: Trainable (classification/retrieval path)")
+    print("  [OK] Spatial Projection: Trainable (detection path)")
     print("  [OK] Fusion Module: Trainable")
     print("  [FROZEN] Text Encoder: Frozen (CLIP)")
     print("\n[LOSS] Loss Functions:")
@@ -384,9 +419,9 @@ def print_static_summary():
        - Parameters: ~2-5M (depends on backbone)
     
     3. ProjectionNetwork [TRAINABLE]
-       - Purpose: Map visual features to CLIP embedding space
-       - Architecture: 2-layer MLP with LayerNorm
-       - Input: Visual features [batch, C, H', W'] or [batch, C]
+       - Purpose: Map visual features to CLIP embedding space (classification/retrieval path)
+       - Architecture: 2-layer MLP with LayerNorm; global pooling before projection
+       - Input: Visual features [batch, C, H', W'] -> pooled to [batch, C]
        - Output: Image embeddings [batch, 512]
        - Parameters: ~0.5-1M
     
@@ -397,12 +432,23 @@ def print_static_summary():
        - Output: Fused features
        - Parameters: ~0.5-1M
     
-    Total Estimated Parameters:
-      - Trainable: ~3-7M
-      - Frozen (CLIP): ~63M
-      - Total: ~66-70M
+    5. SpatialProjection [TRAINABLE]
+       - Purpose: Per-location projection for open-vocabulary detection (no global pooling)
+       - Architecture: 1x1 conv + GroupNorm; preserves spatial dims
+       - Input: Visual features [batch, C, H', W']
+       - Output: Spatial embeddings [batch, 512, H', W']
+       - Parameters: ~0.3-0.5M
     
-    Model Size: ~20-30 MB (trainable only)
+    Two visual output paths (shared backbone + fusion):
+      - Classification/retrieval: backbone -> fusion -> ProjectionNetwork -> image embeddings
+      - Detection: backbone -> fusion -> SpatialProjection -> spatial embeddings -> grid + NMS
+    
+    Total Estimated Parameters:
+      - Trainable: ~4-8M
+      - Frozen (CLIP): ~63M
+      - Total: ~67-71M
+    
+    Model Size: ~25-35 MB (trainable only)
     """
     print(architecture)
     
@@ -446,6 +492,10 @@ def print_static_summary():
     
     # Zero-shot classification
     logits = model.zero_shot_classify(images, ["cat", "dog", "bird"])
+    
+    # Open-vocabulary detection
+    detections = model.open_vocabulary_detect(images, ["person", "car", "dog"])
+    # detections[i]["boxes"], ["scores"], ["labels"]
     """
     print(usage)
 

@@ -6,23 +6,31 @@ Integrates all components:
 - Lightweight Visual Backbone
 - Projection Network
 - Cross-Modal Fusion Module
+- Spatial Projection (for open-vocabulary detection)
 
 Supports:
 - Zero-shot classification
 - Text-image retrieval
-- Open-vocabulary object detection (future)
+- Open-vocabulary object detection
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Union
+
+try:
+    from torchvision.ops import nms as torch_nms
+except ImportError:
+    torch_nms = None
 
 from .components import (
     FrozenCLIPTextEncoder,
     LightweightVisualBackbone,
     ProjectionNetwork,
-    CrossModalFusionModule
+    CrossModalFusionModule,
+    SpatialProjection,
+    grid_boxes_to_image,
 )
 
 
@@ -103,6 +111,12 @@ class KDEOVModel(nn.Module):
             image_dim=backbone_output_dim,
             text_dim=embedding_dim,
             fusion_type=fusion_type
+        )
+        
+        # Spatial projection for open-vocabulary detection (per-location embeddings)
+        self.spatial_projection = SpatialProjection(
+            input_dim=backbone_output_dim,
+            output_dim=embedding_dim
         )
         
         # For training: we'll need CLIP image encoder for distillation
@@ -277,4 +291,144 @@ class KDEOVModel(nn.Module):
         logits = self.compute_similarity(image_embeddings, text_embeddings)
         
         return logits
+
+    def get_spatial_embeddings(
+        self,
+        images: torch.Tensor,
+        text_embeddings: Optional[torch.Tensor] = None,
+        use_fusion: bool = True,
+    ) -> torch.Tensor:
+        """
+        Get per-location image embeddings for open-vocabulary detection.
+        No global pooling; spatial dimensions are preserved.
+
+        Args:
+            images: [batch_size, 3, H, W]
+            text_embeddings: Optional [batch_size, embedding_dim] or [1, embedding_dim]
+                for text-guided fusion (broadcast over batch if needed).
+            use_fusion: Whether to fuse with text when text_embeddings is provided.
+
+        Returns:
+            Spatial embeddings [batch_size, embedding_dim, Hf, Wf]
+        """
+        visual_features = self.visual_backbone(images)
+        final_features = visual_features[-1] if isinstance(visual_features, list) else visual_features
+
+        if text_embeddings is not None and use_fusion:
+            # Broadcast text to batch if [1, D]
+            if text_embeddings.shape[0] == 1 and final_features.shape[0] > 1:
+                text_embeddings = text_embeddings.expand(final_features.shape[0], -1)
+            final_features = self.fusion_module(final_features, text_embeddings)
+
+        spatial_emb = self.spatial_projection(final_features)
+        return spatial_emb
+
+    def open_vocabulary_detect(
+        self,
+        images: torch.Tensor,
+        class_names: List[str],
+        templates: Optional[List[str]] = None,
+        score_threshold: float = 0.2,
+        nms_threshold: float = 0.5,
+        cell_scale: float = 2.0,
+        max_detections_per_image: int = 100,
+    ) -> List[Dict[str, Union[torch.Tensor, List[str]]]]:
+        """
+        Open-vocabulary object detection: localize and classify with arbitrary text.
+
+        Each spatial location in the feature map is scored against all class text
+        embeddings; default boxes are generated from the grid and filtered by
+        score and NMS.
+
+        Args:
+            images: Input images [batch_size, 3, H, W] (e.g. 224 or 640).
+            class_names: Open-vocabulary class names (e.g. ["person", "car", "dog"]).
+            templates: Prompt templates (default: ["a photo of a {}"]).
+            score_threshold: Minimum similarity score to keep a detection.
+            nms_threshold: IoU threshold for non-maximum suppression.
+            cell_scale: Scale for default box size from grid cells.
+            max_detections_per_image: Max detections to return per image.
+
+        Returns:
+            List of length batch_size. Each element is a dict:
+            - "boxes": [N, 4] tensor in xyxy format (x1, y1, x2, y2)
+            - "scores": [N] tensor
+            - "labels": list of N class name strings
+        """
+        import clip
+
+        if templates is None:
+            templates = ["a photo of a {}"]
+        device = next(self.parameters()).device
+        batch_size, _, img_h, img_w = images.shape
+
+        # Encode class names: one embedding per class (average over templates)
+        prompts = [t.format(c) for c in class_names for t in templates]
+        text_tokens = clip.tokenize(prompts, truncate=True).to(device)
+        text_emb = self.text_encoder(text_tokens)
+        if len(templates) > 1:
+            num_classes = len(class_names)
+            text_emb = text_emb.view(num_classes, len(templates), -1).mean(dim=1)
+        else:
+            text_emb = text_emb.view(len(class_names), -1)
+        text_emb = F.normalize(text_emb, dim=-1)
+
+        # Per-location image embeddings [B, D, Hf, Wf]
+        spatial_emb = self.get_spatial_embeddings(images, text_emb, use_fusion=True)
+        b, d, hf, wf = spatial_emb.shape
+        num_cells = hf * wf
+
+        # [B, Hf*Wf, D] @ [num_classes, D].t() -> [B, Hf*Wf, num_classes]
+        spatial_flat = spatial_emb.permute(0, 2, 3, 1).reshape(b, num_cells, d)
+        scores_all = torch.matmul(spatial_flat, text_emb.t())
+
+        # Default boxes in image coordinates (xyxy)
+        boxes = grid_boxes_to_image(hf, wf, img_h, img_w, cell_scale=cell_scale, device=device)
+        boxes = boxes.unsqueeze(0).expand(batch_size, -1, -1)
+
+        # Per cell: max score over classes -> objectness; argmax -> label
+        cell_scores, label_indices = scores_all.max(dim=-1)
+        label_indices = label_indices.cpu()
+
+        out_list: List[Dict[str, Union[torch.Tensor, List[str]]]] = []
+        for i in range(batch_size):
+            scores_i = cell_scores[i]
+            boxes_i = boxes[i]
+            labels_i = label_indices[i]
+
+            # Threshold
+            keep = scores_i >= score_threshold
+            if keep.sum() == 0:
+                out_list.append({
+                    "boxes": torch.zeros(0, 4, device=device, dtype=boxes.dtype),
+                    "scores": torch.zeros(0, device=device),
+                    "labels": [],
+                })
+                continue
+
+            boxes_i = boxes_i[keep]
+            scores_i = scores_i[keep]
+            labels_i = labels_i[keep]
+            label_names = [class_names[int(k)] for k in labels_i.tolist()]
+
+            # NMS (per-image; class-agnostic) and cap number of detections
+            if torch_nms is not None and len(boxes_i) > 1:
+                keep_nms = torch_nms(boxes_i, scores_i, nms_threshold)
+                keep_nms = keep_nms[:max_detections_per_image]
+                boxes_i = boxes_i[keep_nms]
+                scores_i = scores_i[keep_nms]
+                label_names = [label_names[int(j)] for j in keep_nms.cpu().tolist()]
+            elif len(boxes_i) > max_detections_per_image:
+                top_scores, top_idx = scores_i.topk(max_detections_per_image, largest=True)
+                boxes_i = boxes_i[top_idx]
+                scores_i = top_scores
+                label_names = [label_names[int(j)] for j in top_idx.cpu().tolist()]
+
+            out_list.append({
+                "boxes": boxes_i,
+                "scores": scores_i,
+                "labels": label_names,
+            })
+
+        return out_list
 

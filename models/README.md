@@ -2,6 +2,12 @@
 
 This directory contains the implementation of the Knowledge Distillation for Efficient Open-Vocabulary Vision (KDEOV) model based on Section 3 Methodology.
 
+**Current model structure (high level):**
+- **Text stream**: Frozen CLIP Text Encoder → text embeddings.
+- **Visual stream**: Lightweight Visual Backbone (YOLOv8n / YOLOv5s or simple CNN) → multi-scale features → optional Cross-Modal Fusion (FiLM or cross-attention) with text. Then:
+  - **Classification / retrieval**: Projection Network (global pooling) → image embeddings; similarity with text for zero-shot classification and retrieval.
+  - **Open-vocabulary detection**: Spatial Projection (no pooling) → per-location embeddings; similarity with class-name text + grid boxes + NMS → boxes, scores, labels.
+
 ## Model Components
 
 ### 1. Frozen CLIP Text Encoder (`FrozenCLIPTextEncoder`)
@@ -27,6 +33,12 @@ This directory contains the implementation of the Knowledge Distillation for Eff
 - Supports two fusion types:
   - **FiLM**: Feature-wise Linear Modulation (scale and shift)
   - **Cross-Attention**: Attention-based fusion
+
+### 5. Spatial Projection (`SpatialProjection`)
+- 1×1 conv + GroupNorm that maps backbone feature maps to CLIP embedding space
+- **Preserves spatial dimensions** (no global pooling): output shape `[B, embedding_dim, Hf, Wf]`
+- Used for open-vocabulary detection: each spatial location has an embedding for region–text similarity
+- Shared backbone and optional fusion; then spatial projection (detection path) vs. Projection Network (classification path)
 
 ## Loss Functions
 
@@ -54,6 +66,7 @@ Integrates all components into a unified model that supports:
 - **Zero-shot classification**: Classify images using text prompts
 - **Text-image retrieval**: Find images matching text queries
 - **Feature extraction**: Extract aligned image and text embeddings
+- **Open-vocabulary object detection**: Localize and classify with arbitrary class names
 
 ## Usage
 
@@ -82,6 +95,15 @@ text_embeddings = model.encode_text(text)
 # Zero-shot classification
 class_names = ["cat", "dog", "bird"]
 logits = model.zero_shot_classify(images, class_names)
+
+# Open-vocabulary object detection
+detections = model.open_vocabulary_detect(
+    images,
+    class_names=["person", "car", "dog"],
+    score_threshold=0.2,
+    nms_threshold=0.5,
+)
+# detections[i]["boxes"], ["scores"], ["labels"] per image
 ```
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
 read_file
@@ -114,18 +136,32 @@ During pretraining, the model learns to:
 2. **Align** image and text embeddings in shared semantic space
 3. **Fuse** text and image features for text-guided processing
 
+### Model Structure Overview
+
+The model has **two visual output paths** sharing the same backbone and fusion:
+
+| Path | Use | After backbone + fusion | Output |
+|------|-----|-------------------------|--------|
+| **Classification / retrieval** | `encode_image`, `forward`, `zero_shot_classify` | Projection Network (global pooling) | Image embeddings `[B, 512]` |
+| **Detection** | `get_spatial_embeddings`, `open_vocabulary_detect` | Spatial Projection (no pooling) | Per-location embeddings `[B, 512, Hf, Wf]` |
+
+- **Text stream**: Text → Frozen CLIP Text Encoder → Text Embeddings `[B, 512]`.
+- **Visual stream**: Image → Lightweight Backbone → multi-scale features → (optional) Fusion with text → either Projection Network or Spatial Projection.
+
 ### Inference Flow
 
-1. **Image Processing**:
+1. **Image-level (classification / retrieval)**:
    - Images → Lightweight Backbone → Multi-scale Features
    - Features → Fusion Module (with text) → Fused Features
-   - Fused Features → Projection Network → Image Embeddings
-
-2. **Text Processing**:
-   - Text → Frozen CLIP Text Encoder → Text Embeddings
-
-3. **Similarity Computation**:
+   - Fused Features → **Projection Network** (global average pooling) → Image Embeddings `[B, 512]`
    - Cosine similarity between image and text embeddings
+
+2. **Open-vocabulary detection**:
+   - Images → Lightweight Backbone → Multi-scale Features
+   - Features → Fusion Module (with text) → Fused Features
+   - Fused Features → **Spatial Projection** (no pooling) → Per-location embeddings `[B, 512, Hf, Wf]`
+   - Text → Frozen CLIP Text Encoder → Class name embeddings
+   - Similarity at each location with each class → scores; grid default boxes → NMS → detections (boxes, scores, labels)
 
 ## File Structure
 
