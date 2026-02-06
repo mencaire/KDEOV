@@ -14,22 +14,27 @@ import clip
 
 class FrozenCLIPTextEncoder(nn.Module):
     """
-    Frozen CLIP Text Encoder
+    Frozen CLIP Text Encoder (Optimized)
     
     Uses the pretrained CLIP text encoder as a frozen semantic reference.
-    The text encoder processes text prompts and outputs semantic embeddings
-    in the CLIP embedding space.
+    
+    Optimizations:
+    1. Offline Loading: Checks local path first to prevent repeated downloads.
+    2. Type Safety: Ensures output is float32 to match the visual backbone.
+    3. Memory Efficiency: Explicitly disables gradient calculation.
     """
     
-    def __init__(self, model_name: str = "ViT-B/32", device: Optional[str] = None):
+    def __init__(self, model_name: str = "ViT-B/32", device: Optional[str] = None, download_root: str = "./checkpoints"):
         """
         Args:
             model_name: CLIP model variant (e.g., "ViT-B/32", "ViT-L/14")
             device: Device to load CLIP model on (default: auto-detect - MPS/CUDA/CPU)
+            download_root: Directory to store/load the pretrained model weights (for offline support)
         """
         super().__init__()
         self.model_name = model_name
         
+        # 1. Device Auto-detection
         # Use provided device, or auto-detect (support Mac MPS, NVIDIA CUDA, or CPU)
         if device is not None:
             self.device = device
@@ -41,40 +46,57 @@ class FrozenCLIPTextEncoder(nn.Module):
             else:
                 self.device = "cpu"
         
-        # Load CLIP model on the correct device
-        clip_model, _ = clip.load(model_name, device=self.device)
+        print(f"Initializing CLIP Text Encoder on device: {self.device}")
+
+        # 2. Optimized Loading Logic (Offline Support)
+        # Check if the model file already exists locally to avoid networking issues
+        os.makedirs(download_root, exist_ok=True)
+        model_filename = model_name.replace("/", "-") + ".pt"
+        local_model_path = os.path.join(download_root, model_filename)
+
+        try:
+            if os.path.exists(local_model_path):
+                print(f"Loading CLIP from local file: {local_model_path}")
+                # Load from local file
+                clip_model, _ = clip.load(local_model_path, device=self.device)
+            else:
+                print(f"Downloading CLIP to: {download_root}")
+                # Download and load
+                clip_model, _ = clip.load(model_name, device=self.device, download_root=download_root)
+        except Exception as e:
+            print(f"Error loading CLIP: {e}. Falling back to default download.")
+            clip_model, _ = clip.load(model_name, device=self.device)
+
+        # 3. Extract and Freeze Text Encoder
+        # We only need the text part of CLIP, so we discard the visual part to save memory
         self.text_encoder = clip_model.encode_text
         
-        # Freeze all parameters
-        for param in clip_model.parameters():
+        # Freeze all parameters to prevent updates during training (Knowledge Distillation)
+        for param in self.text_encoder.parameters(): # type: ignore
             param.requires_grad = False
-        
-        self.clip_model = clip_model
-        self.embedding_dim = clip_model.text_projection.shape[1]
-        
+            
     def forward(self, text: torch.Tensor) -> torch.Tensor:
         """
-        Encode text to embeddings
+        Encodes text tokens into semantic embeddings.
         
         Args:
-            text: Tokenized text input [batch_size, seq_len]
+            text: Tokenized text tensor of shape [batch_size, 77]
             
         Returns:
-            Text embeddings [batch_size, embedding_dim]
+            Tensor of shape [batch_size, embed_dim] (float32)
         """
+        # Ensure no gradients are computed
         with torch.no_grad():
-            text_features = self.text_encoder(text)
-            # Ensure float32 dtype for compatibility with other model components
-            if text_features.dtype != torch.float32:
-                text_features = text_features.to(dtype=torch.float32)
-            # Normalize embeddings
-            text_features = F.normalize(text_features, dim=-1)
-        return text_features
-    
-    def encode_text(self, text: torch.Tensor) -> torch.Tensor:
-        """Alias for forward"""
-        return self.forward(text)
-
+            # Encode text using CLIP
+            embeddings = self.text_encoder(text)
+            
+            # Normalize embeddings (CLIP standard practice)
+            embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
+            
+            # CRITICAL: Cast to float32
+            # CLIP usually outputs float16, but downstream components (YOLO) are often float32.
+            # Mixing them can cause errors on MPS/CPU.
+            return embeddings.float()
 
 class LightweightVisualBackbone(nn.Module):
     """

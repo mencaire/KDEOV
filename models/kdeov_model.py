@@ -170,53 +170,69 @@ class KDEOVModel(nn.Module):
         return embeddings
     
     def forward(
-        self,
-        images: Optional[torch.Tensor] = None,
-        text: Optional[torch.Tensor] = None,
-        use_fusion: bool = True
+        self, 
+        images: torch.Tensor, 
+        text_tokens: Optional[torch.Tensor] = None
     ) -> Dict[str, torch.Tensor]:
         """
-        Forward pass
+        Forward pass of the KDEOV model.
         
         Args:
-            images: Input images [batch_size, 3, H, W]
-            text: Tokenized text [batch_size, seq_len]
-            use_fusion: Whether to use cross-modal fusion
-        
+            images: Input images tensor [batch_size, 3, H, W]
+            text_tokens: Tokenized text descriptions [batch_size, 77] (Optional for inference)
+            
         Returns:
-            Dictionary with embeddings and/or similarity scores
+            Dictionary containing:
+            - 'visual_features': Feature maps from backbone
+            - 'text_features': CLIP text embeddings (if text is provided)
+            - 'fused_map': Multimodal feature map after fusion
+            - 'logits': (Optional) Classification logits
         """
-        outputs = {}
-        text_embeddings = None
-        if text is not None:
-            text_embeddings = self.text_encoder(text)
-            outputs["text_embeddings"] = text_embeddings
         
-        if images is not None:
-            # Extract visual features
-            visual_features = self.visual_backbone(images)
-            final_features = visual_features[-1] if isinstance(visual_features, list) else visual_features
-            
-            # Apply fusion if text is provided
-            if text_embeddings is not None and use_fusion:
-                fused_features = self.fusion_module(final_features, text_embeddings)
-                # Project fused features
-                image_embeddings = self.projection(fused_features)
-            else:
-                # Project without fusion
-                image_embeddings = self.projection(final_features)
-            
-            outputs["image_embeddings"] = image_embeddings
+        # 1. Visual Branch (Student)
+        # ---------------------------------------------------------
+        # Extract features using the lightweight backbone (e.g., YOLO)
+        # Output shape: [batch_size, channels, grid_h, grid_w]
+        visual_features = self.visual_backbone(images)
         
-        # Compute similarity if both are provided
-        if images is not None and text_embeddings is not None:
-            image_emb = outputs["image_embeddings"]
-            text_emb = outputs["text_embeddings"]
-            
-            # Cosine similarity
-            similarity = F.cosine_similarity(image_emb, text_emb, dim=-1)
-            outputs["similarity"] = similarity
+        # Project visual features to match CLIP's dimension
+        # This aligns the student's visual space with the teacher's semantic space
+        projected_visual = self.projection(visual_features)
         
+        outputs = {
+            "visual_features": projected_visual
+        }
+
+        # 2. Text Branch (Teacher) - Optional
+        # ---------------------------------------------------------
+        # Only execute if text is provided (e.g., during training or ZS-Detection)
+        if text_tokens is not None:
+            # Get semantic embeddings from frozen CLIP
+            # Note: The modified component ensures this returns float32
+            text_embeddings = self.text_encoder(text_tokens)
+            
+            outputs["text_features"] = text_embeddings
+
+            # 3. Cross-Modal Fusion
+            # -----------------------------------------------------
+            # Fuse visual and text features to highlight relevant regions
+            # e.g., If text is "cat", the fusion map should highlight the cat in the image
+            
+            # Ensure data types match before fusion (Critical for AMP/MPS)
+            if projected_visual.dtype != text_embeddings.dtype:
+                text_embeddings = text_embeddings.to(projected_visual.dtype)
+            
+            fused_map = self.fusion_module(projected_visual, text_embeddings)
+            outputs["fused_map"] = fused_map
+            
+            # 4. Spatial Projection (Detection Head)
+            # -----------------------------------------------------
+            # Predict bounding boxes and objectness scores from the fused map
+            if hasattr(self, 'spatial_projection'):
+                # Output: [batch_size, num_anchors, 4+1+num_classes] or similar
+                predictions = self.spatial_projection(fused_map)
+                outputs["predictions"] = predictions
+
         return outputs
     
     def compute_similarity(
