@@ -21,10 +21,12 @@ This directory contains the implementation of the Knowledge Distillation for Eff
 - Supports both YOLOv8n and YOLOv5s backbones
 - Falls back to simple CNN if YOLO is not available
 
-### 3. Projection Network (`ProjectionNetwork`)
-- 2-layer MLP that maps image features to CLIP embedding space
-- Includes LayerNorm and dropout for regularization
-- Outputs normalized embeddings aligned with CLIP space
+### 3. Projection Network (`ProjectionNetwork`) & Global Alignment
+- **Structure**: 2-layer MLP that maps image features to CLIP embedding space.
+- **Pooling**: Applies **Global Average Pooling (GAP)** to convert spatial feature maps `[B, C, H, W]` into global vectors `[B, C]`.
+- **Normalization**: Applies **L2 Normalization** to ensure embeddings lie on a hypersphere.
+- **Output**: Normalized global image embeddings ready for cosine similarity calculation with text.
+
 
 ### 4. Cross-Modal Fusion Module (`CrossModalFusionModule`)
 - Implements Feature-wise Linear Modulation (FiLM) or cross-attention
@@ -62,11 +64,22 @@ This directory contains the implementation of the Knowledge Distillation for Eff
 ## Main Model
 
 ### KDEOVModel
-Integrates all components into a unified model that supports:
-- **Zero-shot classification**: Classify images using text prompts
-- **Text-image retrieval**: Find images matching text queries
-- **Feature extraction**: Extract aligned image and text embeddings
-- **Open-vocabulary object detection**: Localize and classify with arbitrary class names
+Integrates all components into a unified model.
+
+**Key Features:**
+- **Learnable Temperature**: Includes a learnable `logit_scale` parameter (initialized to $\log(1/0.07)$) to scale cosine similarities, critical for InfoNCE loss convergence.
+- **Dual-Path Output**:
+  - **Global Path**: Returns normalized vectors for contrastive learning.
+  - **Spatial Path**: Returns feature maps for detection.
+
+**Forward Output (`forward` returns a Dictionary):**
+- `visual_features`: Normalized global image embeddings `[B, 512]` (for contrastive loss).
+- `text_features`: Normalized text embeddings `[B, 512]` (if text provided).
+- `logits`: Scaled similarity scores `[B, B]` calculated as $(I \cdot T) \times \exp(\text{logit\_scale})$.
+- `visual_map`: The spatial feature map before pooling (useful for debugging).
+- `fused_map`: (Optional) Feature map after text-visual fusion.
+- `predictions`: (Optional) Detection head outputs.
+
 
 ## Usage
 
@@ -152,9 +165,10 @@ The model has **two visual output paths** sharing the same backbone and fusion:
 
 1. **Image-level (classification / retrieval)**:
    - Images → Lightweight Backbone → Multi-scale Features
-   - Features → Fusion Module (with text) → Fused Features
-   - Fused Features → **Projection Network** (global average pooling) → Image Embeddings `[B, 512]`
-   - Cosine similarity between image and text embeddings
+   - Features → Projection Network → Spatial Map `[B, 512, H, W]`
+   - Spatial Map → **Global Average Pooling** → **L2 Normalization** → Image Embeddings `[B, 512]`
+   - **Similarity Calculation**: Dot product between normalized Image and Text embeddings, scaled by `logit_scale`.
+
 
 2. **Open-vocabulary detection**:
    - Images → Lightweight Backbone → Multi-scale Features

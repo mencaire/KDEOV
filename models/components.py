@@ -339,61 +339,50 @@ class LightweightVisualBackbone(nn.Module):
 
 class ProjectionNetwork(nn.Module):
     """
-    Projection Network
+    Projection Network (Spatial-Aware)
     
-    Maps image features from the lightweight backbone to the CLIP embedding space.
-    Uses a 2-layer MLP with normalization.
+    Maps visual features to CLIP embedding space while PRESERVING spatial dimensions.
+    Uses 1x1 Convolutions instead of Linear layers to handle [B, C, H, W] inputs.
+    
+    Structure:
+    - Conv2d 1x1 (Input -> Output)
+    - BatchNorm2d
+    - ReLU
+    - Dropout
+    - Conv2d 1x1 (Output -> Output)
+    - BatchNorm2d
     """
     
-    def __init__(
-        self,
-        input_dim: int = 512,
-        output_dim: int = 512,  # CLIP embedding dimension
-        hidden_dim: Optional[int] = None
-    ):
+    def __init__(self, input_dim: int, output_dim: int, dropout: float = 0.1):
         """
         Args:
-            input_dim: Dimension of input image features
-            output_dim: Dimension of output embeddings (CLIP embedding dim)
-            hidden_dim: Hidden layer dimension (default: input_dim)
+            input_dim: Input channel dimension (from backbone)
+            output_dim: Output embedding dimension (e.g., 512 for CLIP)
+            dropout: Dropout probability
         """
         super().__init__()
-        if hidden_dim is None:
-            hidden_dim = input_dim
         
-        self.projection = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
+        self.net = nn.Sequential(
+            # 1. First Projection (Spatial Linear Map)
+            nn.Conv2d(input_dim, output_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(output_dim),  # BN is better for CNNs than LayerNorm
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
-            nn.Linear(hidden_dim, output_dim),
-            nn.LayerNorm(output_dim)
+            nn.Dropout(dropout),
+            
+            # 2. Second Projection
+            nn.Conv2d(output_dim, output_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(output_dim)
         )
-    
-    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Project image features to CLIP embedding space
-        
         Args:
-            image_features: Image features [batch_size, ..., input_dim]
+            x: Input feature map [Batch, Input_Dim, H, W]
             
         Returns:
-            Projected embeddings [batch_size, ..., output_dim]
+            Projected feature map [Batch, Output_Dim, H, W]
         """
-        # Flatten spatial dimensions if needed
-        original_shape = image_features.shape
-        if len(original_shape) > 2:
-            # Global average pooling
-            image_features = F.adaptive_avg_pool2d(image_features, (1, 1))
-            image_features = image_features.view(original_shape[0], -1)
-        
-        # Project to embedding space
-        embeddings = self.projection(image_features)
-        
-        # Normalize embeddings
-        embeddings = F.normalize(embeddings, dim=-1)
-        
-        return embeddings
+        return self.net(x)
 
 
 class SpatialProjection(nn.Module):
