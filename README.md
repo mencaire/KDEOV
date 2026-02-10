@@ -132,9 +132,10 @@ The first term has been primarily dedicated to **theoretical research** and foun
 - ✅ All dependencies installed and verified
 - ✅ IDE configuration for development
 
-**Next Steps:**
-- Dataset preparation and data loading implementation
-- Model training on real datasets
+### Term 2 (Ongoing) — From February
+**Planned next steps:**
+- Dataset preparation and data-loading pipeline
+- Training on real image–text caption datasets (e.g., COCO)
 - Performance evaluation and benchmarking
 - Model optimization and fine-tuning
 
@@ -446,146 +447,15 @@ This will display:
 
 #### 3. Run Example Code
 
-```bash
-# Run usage examples (to understand model API)
-python example_usage.py
-```
-
 #### 4. Initialize Model
-
-```python
-import torch
-from models import KDEOVModel
-
-# Create model instance (automatically on CUDA)
-model = KDEOVModel(
-    clip_model_name="ViT-B/32",  # Options: RN50, RN101, ViT-B/16, ViT-L/14, etc.
-    backbone_type="yolov8n",    # Options: yolov8n, yolov5s
-    fusion_type="film"           # Options: film, cross_attention
-).cuda()
-
-# Set to evaluation mode
-model.eval()
-```
 
 #### 5. Zero-Shot Classification
 
-```python
-import clip
-from PIL import Image
-import torchvision.transforms as transforms
-
-# Load and preprocess image
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.48145466, 0.4578275, 0.40821073),
-                        (0.26862954, 0.26130258, 0.27577711))
-])
-
-image = Image.open("your_image.jpg")
-image_tensor = transform(image).unsqueeze(0).cuda()
-
-# Define class names
-class_names = ["cat", "dog", "bird", "car", "bicycle"]
-
-# Perform classification
-with torch.no_grad():
-    logits = model.zero_shot_classify(image_tensor, class_names)
-    probs = torch.softmax(logits, dim=-1)
-    predicted_idx = torch.argmax(probs, dim=-1).item()
-    
-print(f"Predicted: {class_names[predicted_idx]} (confidence: {probs[0][predicted_idx]:.4f})")
-```
-
 #### 6. Text-Image Retrieval
-
-```python
-import clip
-
-# Prepare image database (example)
-image_database = [...]  # Your list of images
-image_tensors = torch.stack([transform(img) for img in image_database]).cuda()
-
-# Query text
-query_text = "a photo of a cat"
-text_tokens = clip.tokenize([query_text]).cuda()
-
-# Encode
-with torch.no_grad():
-    image_embeddings = model.encode_image(image_tensors)
-    text_embeddings = model.encode_text(text_tokens)
-
-# Compute similarity and retrieve
-similarities = model.compute_similarity(image_embeddings, text_embeddings)
-top_k_indices = torch.topk(similarities, k=5, dim=0).indices
-
-print(f"Top 5 most similar images for '{query_text}':")
-for i, idx in enumerate(top_k_indices):
-    print(f"  Rank {i+1}: Image {idx.item()} (similarity: {similarities[idx].item():.4f})")
-```
 
 #### 7. Open-Vocabulary Object Detection
 
-```python
-# Same image preprocessing as above (e.g. transform, image_tensor [1, 3, 224, 224])
-# Define open-vocabulary class names (any text labels)
-class_names = ["person", "car", "dog", "bus", "bicycle"]
-
-with torch.no_grad():
-    detections = model.open_vocabulary_detect(
-        image_tensor,
-        class_names=class_names,
-        score_threshold=0.2,
-        nms_threshold=0.5,
-        max_detections_per_image=50,
-    )
-
-# detections is a list of dicts (one per image)
-for i, det in enumerate(detections):
-    boxes = det["boxes"]   # [N, 4] in xyxy format (x1, y1, x2, y2)
-    scores = det["scores"] # [N]
-    labels = det["labels"] # list of N class name strings
-    print(f"Image {i}: {len(labels)} detections")
-    for box, score, label in zip(boxes, scores, labels):
-        print(f"  {label}: {score:.2f} @ {box.tolist()}")
-```
-
 #### 8. Model Training
-
-```python
-from train_feature_alignment import train_feature_alignment
-from torch.utils.data import Dataset, DataLoader
-
-# Implement your dataset class
-class YourDataset(Dataset):
-    def __init__(self):
-        # Initialize dataset
-        pass
-    
-    def __len__(self):
-        return len(self.data)
-    
-    def __getitem__(self, idx):
-        # Return (image_tensor, text_tokens) pair
-        return image, text_tokens
-
-# Create data loader
-dataset = YourDataset()
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-# Initialize model (automatically on CUDA)
-model = KDEOVModel(...).cuda()
-
-# Start training
-train_feature_alignment(
-    model=model,
-    dataloader=dataloader,
-    num_epochs=10,
-    learning_rate=1e-4,
-    save_path="checkpoints/kdeov"
-)
-```
 
 ### Model Execution Workflow
 
