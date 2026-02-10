@@ -2,8 +2,11 @@ import torch
 import sys
 import os
 
-# 这一步是为了让 Python 能找到 models 文件夹里的代码
-sys.path.append(os.getcwd())
+# Add project root so Python can find the models package (works from repo root or test_scripts/)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 try:
     print("Step 1: 尝试导入 LightweightVisualBackbone...")

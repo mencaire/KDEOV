@@ -300,16 +300,16 @@ This repository contains comprehensive documentation organized into the followin
 
 ### Utility Scripts
 
-#### `test_environment.py`
+#### `test_scripts/test_environment.py`
 - **Purpose**: Comprehensive environment verification script for CUDA, CLIP, and ultralytics
 - **Functionality**:
   - Verifies CUDA availability and GPU information
   - Tests CLIP import and basic functionality (lists available models without downloading)
   - Tests ultralytics import and YOLO class availability
   - Performs integration tests with CUDA tensor operations
-- **Usage**:
+- **Usage** (run from project root):
   ```bash
-  python test_environment.py
+  python test_scripts/test_environment.py
   ```
 - **Use Cases**:
   - Complete environment check: Verifies all required components (CUDA, CLIP, ultralytics) in one script
@@ -317,7 +317,7 @@ This repository contains comprehensive documentation organized into the followin
   - Quick verification: Run before starting training to ensure everything is properly configured
   - No downloads: The script only checks imports and basic functionality without downloading models
 
-#### `test_backbone.py`
+#### `test_scripts/test_backbone.py`
 - **Purpose**: Test script for verifying the `LightweightVisualBackbone` component functionality
 - **Functionality**:
   - Tests import of `LightweightVisualBackbone` from `models.components`
@@ -325,9 +325,9 @@ This repository contains comprehensive documentation organized into the followin
   - Performs forward pass with dummy input tensor (batch=1, channels=3, height=640, width=640)
   - Validates output feature shapes and structure
   - Provides detailed error messages for debugging backbone issues
-- **Usage**:
+- **Usage** (run from project root):
   ```bash
-  python test_backbone.py
+  python test_scripts/test_backbone.py
   ```
 - **Use Cases**:
   - Backbone verification: Ensures the YOLO backbone is correctly integrated and functional
@@ -339,7 +339,7 @@ This repository contains comprehensive documentation organized into the followin
   - The script uses dummy random tensors; replace with real images for actual feature extraction testing
   - Outputs detailed step-by-step progress and error information for troubleshooting
 
-#### `model_summary.py`
+#### `test_scripts/model_summary.py`
 - **Purpose**: Comprehensive model summary and visualization script for KDEOV model architecture analysis
 - **Functionality**:
   - **Model Architecture Visualization**: Displays text-based architecture diagram showing data flow through all components, including the dual-path design (Projection Network for classification/retrieval, Spatial Projection for open-vocabulary detection)
@@ -350,16 +350,16 @@ This repository contains comprehensive documentation organized into the followin
   - **Training Information**: Lists trainable vs frozen components and available loss functions
   - **Model Comparison**: Compares KDEOV model size with full CLIP model
   - **Static Summary Mode**: Works even without CLIP installed, showing architecture overview and both visual output paths
-- **Usage**:
+- **Usage** (run from project root):
   ```bash
   # Basic usage (default: yolov8n backbone, film fusion)
-  python model_summary.py
+  python test_scripts/model_summary.py
 
   # With specific backbone and fusion type
-  python model_summary.py --backbone yolov5s --fusion cross_attention
+  python test_scripts/model_summary.py --backbone yolov5s --fusion cross_attention
 
   # Static summary only (no model loading, works without dependencies)
-  python model_summary.py --static
+  python test_scripts/model_summary.py --static
   ```
 - **Command-line Options**:
   - `--backbone BACKBONE`: Choose backbone type (`yolov8n`, `yolov5s`, or `simple`)
@@ -415,13 +415,13 @@ You can verify that required packages are properly installed by running:
 
 ```bash
 # Method 1: Comprehensive verification (recommended)
-python test_environment.py
+python test_scripts/test_environment.py
 
 # Method 2: Quick verification
 python -c "import torch; import clip; from ultralytics import YOLO; print('Environment OK!')"
 ```
 
-The `test_environment.py` script provides comprehensive verification:
+The `test_scripts/test_environment.py` script provides comprehensive verification:
 - Confirms CUDA availability and displays GPU information
 - Verifies that imports work successfully (`import clip` and `import ultralytics`)
 - Lists available CLIP models without downloading them
@@ -433,7 +433,7 @@ The `test_environment.py` script provides comprehensive verification:
 
 ```bash
 # Generate comprehensive model summary and statistics
-python model_summary.py
+python test_scripts/model_summary.py
 ```
 
 This will display:
@@ -617,17 +617,13 @@ KDEOV/
 │                                      # Purpose: Demonstrate zero-shot classification, text-image retrieval, etc.
 │                                      # Execution: python example_usage.py
 │
-├── test_environment.py             # Environment verification script
-│                                      # Purpose: Verify CUDA, CLIP, and ultralytics availability
-│                                      # Execution: python test_environment.py
-│
-├── test_backbone.py                  # YOLO backbone testing script
-│                                      # Purpose: Test LightweightVisualBackbone component functionality
-│                                      # Execution: python test_backbone.py
-│
-├── model_summary.py                  # Model summary and visualization script
-│                                      # Purpose: Comprehensive model architecture analysis and statistics
-│                                      # Execution: python model_summary.py [--backbone BACKBONE] [--fusion FUSION] [--static]
+├── test_scripts/                     # Test and utility scripts
+│   ├── test_environment.py           # Environment verification (CUDA, CLIP, ultralytics)
+│   │                                    # Execution: python test_scripts/test_environment.py
+│   ├── test_backbone.py              # YOLO backbone testing
+│   │                                    # Execution: python test_scripts/test_backbone.py
+│   └── model_summary.py              # Model summary and visualization
+│                                        # Execution: python test_scripts/model_summary.py [--backbone BACKBONE] [--fusion FUSION] [--static]
 │
 ├── requirements.txt                  # Python dependency package list
 │                                      # Purpose: Define all required Python packages for the project
@@ -659,9 +655,9 @@ KDEOV/
 | `models/losses.py` | Python Module | Loss functions | `from models import FeatureAlignmentLoss` |
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
-| `test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_environment.py` |
-| `test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_backbone.py` |
-| `model_summary.py` | Executable Script | Model architecture analysis and statistics | `python model_summary.py` |
+| `test_scripts/test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_scripts/test_environment.py` |
+| `test_scripts/test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_scripts/test_backbone.py` |
+| `test_scripts/model_summary.py` | Executable Script | Model architecture analysis and statistics | `python test_scripts/model_summary.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |
