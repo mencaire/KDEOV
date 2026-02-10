@@ -356,11 +356,12 @@ if __name__ == "__main__":
     device = get_device()
     print(f"Using device: {device}")
     
-    # Initialize model on available device
+    # Initialize model on available device (checkpoints loaded from weights/)
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
         backbone_type="yolov8n",
-        fusion_type="film"
+        fusion_type="film",
+        weights_dir="weights"
     ).to(device)
     
     # Example: Create a dummy dataset

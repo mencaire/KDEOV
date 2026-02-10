@@ -24,15 +24,17 @@ class FrozenCLIPTextEncoder(nn.Module):
     3. Memory Efficiency: Explicitly disables gradient calculation.
     """
     
-    def __init__(self, model_name: str = "ViT-B/32", device: Optional[str] = None, download_root: str = "./checkpoints"):
+    def __init__(self, model_name: str = "ViT-B/32", device: Optional[str] = None, download_root: Optional[str] = None):
         """
         Args:
             model_name: CLIP model variant (e.g., "ViT-B/32", "ViT-L/14")
             device: Device to load CLIP model on (default: auto-detect - MPS/CUDA/CPU)
-            download_root: Directory to store/load the pretrained model weights (for offline support)
+            download_root: Directory to store/load the pretrained model weights. If None, uses "./weights/clip".
         """
         super().__init__()
         self.model_name = model_name
+        if download_root is None:
+            download_root = os.path.join("weights", "clip")
         
         # 1. Device Auto-detection
         # Use provided device, or auto-detect (support Mac MPS, NVIDIA CUDA, or CPU)
@@ -67,12 +69,12 @@ class FrozenCLIPTextEncoder(nn.Module):
             print(f"Error loading CLIP: {e}. Falling back to default download.")
             clip_model, _ = clip.load(model_name, device=self.device)
 
-        # 3. Extract and Freeze Text Encoder
-        # We only need the text part of CLIP, so we discard the visual part to save memory
-        self.text_encoder = clip_model.encode_text
+        # 3. Keep full CLIP model (needed for .parameters() and .encode_text)
+        # We only use the text encoder in forward; visual part is not used but kept for parameter freezing
+        self._clip_model = clip_model
         
         # Freeze all parameters to prevent updates during training (Knowledge Distillation)
-        for param in self.text_encoder.parameters(): # type: ignore
+        for param in self._clip_model.parameters():
             param.requires_grad = False
             
     def forward(self, text: torch.Tensor) -> torch.Tensor:
@@ -88,7 +90,7 @@ class FrozenCLIPTextEncoder(nn.Module):
         # Ensure no gradients are computed
         with torch.no_grad():
             # Encode text using CLIP
-            embeddings = self.text_encoder(text)
+            embeddings = self._clip_model.encode_text(text)
             
             # Normalize embeddings (CLIP standard practice)
             embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
@@ -128,6 +130,9 @@ class LightweightVisualBackbone(nn.Module):
         self._hook_handles = []
         self._hook_features: List[torch.Tensor] = []
         self.feature_dims = None
+        # Default to "weights" folder when pretrained so all checkpoints load from one place
+        if pretrained and weights_dir is None:
+            weights_dir = "weights"
         
         if backbone_type == "yolov8n":
             try:
@@ -164,7 +169,11 @@ class LightweightVisualBackbone(nn.Module):
         elif backbone_type == "yolov5s":
             try:
                 import torch.hub
-                # yolov5s uses torch.hub; set TORCH_HOME in caller (e.g. model_summary) to save under weights/
+                # yolov5s uses torch.hub; cache under weights/torch_hub when weights_dir is set
+                if weights_dir:
+                    torch_hub_dir = os.path.join(weights_dir, "torch_hub")
+                    os.makedirs(torch_hub_dir, exist_ok=True)
+                    os.environ["TORCH_HOME"] = torch_hub_dir
                 yolo_model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=pretrained)
                 self.yolo_model = yolo_model.model
                 # Ensure YOLO model parameters are trainable

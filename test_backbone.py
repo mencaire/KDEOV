@@ -15,10 +15,10 @@ except ImportError as e:
     exit()
 
 def test_yolo():
-    print("\nStep 2: 正在初始化 YOLOv8n 模型 (这可能需要下载权重)...")
+    print("\nStep 2: 正在初始化 YOLOv8n 模型 (权重从 weights/ 加载或下载)...")
     try:
-        # 实例化模型，这里会自动下载 yolov8n.pt
-        backbone = LightweightVisualBackbone(backbone_type="yolov8n", pretrained=True)
+        # 实例化模型，yolov8n.pt 从 weights/ 加载或下载到 weights/
+        backbone = LightweightVisualBackbone(backbone_type="yolov8n", pretrained=True, weights_dir="weights")
         print("✅ 模型初始化成功！")
     except Exception as e:
         print(f"❌ 模型初始化崩溃: {e}")

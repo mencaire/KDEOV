@@ -14,6 +14,7 @@ Supports:
 - Open-vocabulary object detection
 """
 
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -51,7 +52,7 @@ class KDEOVModel(nn.Module):
         backbone_type: str = "yolov8n",
         fusion_type: str = "film",
         embedding_dim: int = 512,
-        weights_dir: Optional[str] = None
+        weights_dir: Optional[str] = "weights"
     ):
         """
         Args:
@@ -59,10 +60,11 @@ class KDEOVModel(nn.Module):
             backbone_type: YOLO backbone type ("yolov8n" or "yolov5s")
             fusion_type: Fusion module type ("film" or "cross_attention")
             embedding_dim: Embedding dimension (should match CLIP)
-            weights_dir: Directory to save/load backbone weights
+            weights_dir: Directory to load all checkpoints (CLIP, YOLO, etc.). Default "weights".
         """
         super().__init__()
-        
+        if weights_dir is None:
+            weights_dir = "weights"
         self.embedding_dim = embedding_dim
         
         # Get device
@@ -73,10 +75,12 @@ class KDEOVModel(nn.Module):
         else:
             self._device = torch.device("cpu")
         
-        # 1. Components Initialization
+        # 1. Components Initialization (all checkpoints from weights_dir)
+        clip_download_root = os.path.join(weights_dir, "clip")
         self.text_encoder = FrozenCLIPTextEncoder(
             model_name=clip_model_name,
-            device=str(self._device)
+            device=str(self._device),
+            download_root=clip_download_root
         )
         
         self.visual_backbone = LightweightVisualBackbone(

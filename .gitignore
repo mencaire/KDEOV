@@ -16,3 +16,8 @@ __pycache__/
 
 # --- 环境变量 (防止密钥泄露) ---
 .env
+
+# --- 权重文件 (checkpoint，上传时忽略) ---
+weights/**/*.pt
+weights/
+*.pt
