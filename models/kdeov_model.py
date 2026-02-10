@@ -238,12 +238,12 @@ class KDEOVModel(nn.Module):
             outputs["logits_per_text"] = logits_per_text
 
             # --- Spatial Detection Path (Optional Fusion) ---
-            # Align data types for fusion (float16/float32 safety)
-            if projected_visual.dtype != text_embeddings.dtype:
-                text_embeddings = text_embeddings.to(projected_visual.dtype)
+            # Fusion expects backbone feature dim (80), not projected (512); same as get_spatial_embeddings
+            if visual_features.dtype != text_embeddings.dtype:
+                text_embeddings = text_embeddings.to(visual_features.dtype)
             
-            # Fuse features for detection
-            fused_map = self.fusion_module(projected_visual, text_embeddings)
+            # Fuse backbone features with text, then spatial_projection maps 80 -> embedding_dim
+            fused_map = self.fusion_module(visual_features, text_embeddings)
             outputs["fused_map"] = fused_map
             
             # Predict boxes/scores if head exists

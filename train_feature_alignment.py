@@ -215,9 +215,9 @@ def train_feature_alignment(
             images = images.to(device)
             texts = texts.to(device)
             
-            # Forward pass through student model
-            student_outputs = model(images=images, text=texts, use_fusion=True)
-            student_image_embeddings = student_outputs["image_embeddings"]
+            # Forward pass through student model (text_tokens for KDEOVModel.forward)
+            student_outputs = model(images=images, text_tokens=texts)
+            student_image_embeddings = student_outputs["visual_features"]
             
             # Get teacher embeddings from frozen CLIP image encoder
             with torch.no_grad():
@@ -227,7 +227,7 @@ def train_feature_alignment(
                 )
             
             # Get text embeddings
-            text_embeddings = student_outputs["text_embeddings"]
+            text_embeddings = student_outputs["text_features"]
             
             # Compute loss
             loss_dict = criterion(
