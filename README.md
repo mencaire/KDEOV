@@ -132,9 +132,10 @@ The first term has been primarily dedicated to **theoretical research** and foun
 - ✅ All dependencies installed and verified
 - ✅ IDE configuration for development
 
-**Next Steps:**
-- Dataset preparation and data loading implementation
-- Model training on real datasets
+### Term 2 (Ongoing) — From February
+**Planned next steps:**
+- Dataset preparation and data-loading pipeline
+- Training on real image–text caption datasets (e.g., COCO)
 - Performance evaluation and benchmarking
 - Model optimization and fine-tuning
 
@@ -300,16 +301,16 @@ This repository contains comprehensive documentation organized into the followin
 
 ### Utility Scripts
 
-#### `test_environment.py`
+#### `test_scripts/test_environment.py`
 - **Purpose**: Comprehensive environment verification script for CUDA, CLIP, and ultralytics
 - **Functionality**:
   - Verifies CUDA availability and GPU information
   - Tests CLIP import and basic functionality (lists available models without downloading)
   - Tests ultralytics import and YOLO class availability
   - Performs integration tests with CUDA tensor operations
-- **Usage**:
+- **Usage** (run from project root):
   ```bash
-  python test_environment.py
+  python test_scripts/test_environment.py
   ```
 - **Use Cases**:
   - Complete environment check: Verifies all required components (CUDA, CLIP, ultralytics) in one script
@@ -317,7 +318,7 @@ This repository contains comprehensive documentation organized into the followin
   - Quick verification: Run before starting training to ensure everything is properly configured
   - No downloads: The script only checks imports and basic functionality without downloading models
 
-#### `test_backbone.py`
+#### `test_scripts/test_backbone.py`
 - **Purpose**: Test script for verifying the `LightweightVisualBackbone` component functionality
 - **Functionality**:
   - Tests import of `LightweightVisualBackbone` from `models.components`
@@ -325,9 +326,9 @@ This repository contains comprehensive documentation organized into the followin
   - Performs forward pass with dummy input tensor (batch=1, channels=3, height=640, width=640)
   - Validates output feature shapes and structure
   - Provides detailed error messages for debugging backbone issues
-- **Usage**:
+- **Usage** (run from project root):
   ```bash
-  python test_backbone.py
+  python test_scripts/test_backbone.py
   ```
 - **Use Cases**:
   - Backbone verification: Ensures the YOLO backbone is correctly integrated and functional
@@ -339,7 +340,7 @@ This repository contains comprehensive documentation organized into the followin
   - The script uses dummy random tensors; replace with real images for actual feature extraction testing
   - Outputs detailed step-by-step progress and error information for troubleshooting
 
-#### `model_summary.py`
+#### `test_scripts/model_summary.py`
 - **Purpose**: Comprehensive model summary and visualization script for KDEOV model architecture analysis
 - **Functionality**:
   - **Model Architecture Visualization**: Displays text-based architecture diagram showing data flow through all components, including the dual-path design (Projection Network for classification/retrieval, Spatial Projection for open-vocabulary detection)
@@ -350,16 +351,16 @@ This repository contains comprehensive documentation organized into the followin
   - **Training Information**: Lists trainable vs frozen components and available loss functions
   - **Model Comparison**: Compares KDEOV model size with full CLIP model
   - **Static Summary Mode**: Works even without CLIP installed, showing architecture overview and both visual output paths
-- **Usage**:
+- **Usage** (run from project root):
   ```bash
   # Basic usage (default: yolov8n backbone, film fusion)
-  python model_summary.py
+  python test_scripts/model_summary.py
 
   # With specific backbone and fusion type
-  python model_summary.py --backbone yolov5s --fusion cross_attention
+  python test_scripts/model_summary.py --backbone yolov5s --fusion cross_attention
 
   # Static summary only (no model loading, works without dependencies)
-  python model_summary.py --static
+  python test_scripts/model_summary.py --static
   ```
 - **Command-line Options**:
   - `--backbone BACKBONE`: Choose backbone type (`yolov8n`, `yolov5s`, or `simple`)
@@ -415,13 +416,13 @@ You can verify that required packages are properly installed by running:
 
 ```bash
 # Method 1: Comprehensive verification (recommended)
-python test_environment.py
+python test_scripts/test_environment.py
 
 # Method 2: Quick verification
 python -c "import torch; import clip; from ultralytics import YOLO; print('Environment OK!')"
 ```
 
-The `test_environment.py` script provides comprehensive verification:
+The `test_scripts/test_environment.py` script provides comprehensive verification:
 - Confirms CUDA availability and displays GPU information
 - Verifies that imports work successfully (`import clip` and `import ultralytics`)
 - Lists available CLIP models without downloading them
@@ -433,7 +434,7 @@ The `test_environment.py` script provides comprehensive verification:
 
 ```bash
 # Generate comprehensive model summary and statistics
-python model_summary.py
+python test_scripts/model_summary.py
 ```
 
 This will display:
@@ -446,146 +447,15 @@ This will display:
 
 #### 3. Run Example Code
 
-```bash
-# Run usage examples (to understand model API)
-python example_usage.py
-```
-
 #### 4. Initialize Model
-
-```python
-import torch
-from models import KDEOVModel
-
-# Create model instance (automatically on CUDA)
-model = KDEOVModel(
-    clip_model_name="ViT-B/32",  # Options: RN50, RN101, ViT-B/16, ViT-L/14, etc.
-    backbone_type="yolov8n",    # Options: yolov8n, yolov5s
-    fusion_type="film"           # Options: film, cross_attention
-).cuda()
-
-# Set to evaluation mode
-model.eval()
-```
 
 #### 5. Zero-Shot Classification
 
-```python
-import clip
-from PIL import Image
-import torchvision.transforms as transforms
-
-# Load and preprocess image
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.48145466, 0.4578275, 0.40821073),
-                        (0.26862954, 0.26130258, 0.27577711))
-])
-
-image = Image.open("your_image.jpg")
-image_tensor = transform(image).unsqueeze(0).cuda()
-
-# Define class names
-class_names = ["cat", "dog", "bird", "car", "bicycle"]
-
-# Perform classification
-with torch.no_grad():
-    logits = model.zero_shot_classify(image_tensor, class_names)
-    probs = torch.softmax(logits, dim=-1)
-    predicted_idx = torch.argmax(probs, dim=-1).item()
-    
-print(f"Predicted: {class_names[predicted_idx]} (confidence: {probs[0][predicted_idx]:.4f})")
-```
-
 #### 6. Text-Image Retrieval
-
-```python
-import clip
-
-# Prepare image database (example)
-image_database = [...]  # Your list of images
-image_tensors = torch.stack([transform(img) for img in image_database]).cuda()
-
-# Query text
-query_text = "a photo of a cat"
-text_tokens = clip.tokenize([query_text]).cuda()
-
-# Encode
-with torch.no_grad():
-    image_embeddings = model.encode_image(image_tensors)
-    text_embeddings = model.encode_text(text_tokens)
-
-# Compute similarity and retrieve
-similarities = model.compute_similarity(image_embeddings, text_embeddings)
-top_k_indices = torch.topk(similarities, k=5, dim=0).indices
-
-print(f"Top 5 most similar images for '{query_text}':")
-for i, idx in enumerate(top_k_indices):
-    print(f"  Rank {i+1}: Image {idx.item()} (similarity: {similarities[idx].item():.4f})")
-```
 
 #### 7. Open-Vocabulary Object Detection
 
-```python
-# Same image preprocessing as above (e.g. transform, image_tensor [1, 3, 224, 224])
-# Define open-vocabulary class names (any text labels)
-class_names = ["person", "car", "dog", "bus", "bicycle"]
-
-with torch.no_grad():
-    detections = model.open_vocabulary_detect(
-        image_tensor,
-        class_names=class_names,
-        score_threshold=0.2,
-        nms_threshold=0.5,
-        max_detections_per_image=50,
-    )
-
-# detections is a list of dicts (one per image)
-for i, det in enumerate(detections):
-    boxes = det["boxes"]   # [N, 4] in xyxy format (x1, y1, x2, y2)
-    scores = det["scores"] # [N]
-    labels = det["labels"] # list of N class name strings
-    print(f"Image {i}: {len(labels)} detections")
-    for box, score, label in zip(boxes, scores, labels):
-        print(f"  {label}: {score:.2f} @ {box.tolist()}")
-```
-
 #### 8. Model Training
-
-```python
-from train_feature_alignment import train_feature_alignment
-from torch.utils.data import Dataset, DataLoader
-
-# Implement your dataset class
-class YourDataset(Dataset):
-    def __init__(self):
-        # Initialize dataset
-        pass
-    
-    def __len__(self):
-        return len(self.data)
-    
-    def __getitem__(self, idx):
-        # Return (image_tensor, text_tokens) pair
-        return image, text_tokens
-
-# Create data loader
-dataset = YourDataset()
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-# Initialize model (automatically on CUDA)
-model = KDEOVModel(...).cuda()
-
-# Start training
-train_feature_alignment(
-    model=model,
-    dataloader=dataloader,
-    num_epochs=10,
-    learning_rate=1e-4,
-    save_path="checkpoints/kdeov"
-)
-```
 
 ### Model Execution Workflow
 
@@ -617,17 +487,13 @@ KDEOV/
 │                                      # Purpose: Demonstrate zero-shot classification, text-image retrieval, etc.
 │                                      # Execution: python example_usage.py
 │
-├── test_environment.py             # Environment verification script
-│                                      # Purpose: Verify CUDA, CLIP, and ultralytics availability
-│                                      # Execution: python test_environment.py
-│
-├── test_backbone.py                  # YOLO backbone testing script
-│                                      # Purpose: Test LightweightVisualBackbone component functionality
-│                                      # Execution: python test_backbone.py
-│
-├── model_summary.py                  # Model summary and visualization script
-│                                      # Purpose: Comprehensive model architecture analysis and statistics
-│                                      # Execution: python model_summary.py [--backbone BACKBONE] [--fusion FUSION] [--static]
+├── test_scripts/                     # Test and utility scripts
+│   ├── test_environment.py           # Environment verification (CUDA, CLIP, ultralytics)
+│   │                                    # Execution: python test_scripts/test_environment.py
+│   ├── test_backbone.py              # YOLO backbone testing
+│   │                                    # Execution: python test_scripts/test_backbone.py
+│   └── model_summary.py              # Model summary and visualization
+│                                        # Execution: python test_scripts/model_summary.py [--backbone BACKBONE] [--fusion FUSION] [--static]
 │
 ├── requirements.txt                  # Python dependency package list
 │                                      # Purpose: Define all required Python packages for the project
@@ -659,9 +525,9 @@ KDEOV/
 | `models/losses.py` | Python Module | Loss functions | `from models import FeatureAlignmentLoss` |
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
-| `test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_environment.py` |
-| `test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_backbone.py` |
-| `model_summary.py` | Executable Script | Model architecture analysis and statistics | `python model_summary.py` |
+| `test_scripts/test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_scripts/test_environment.py` |
+| `test_scripts/test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_scripts/test_backbone.py` |
+| `test_scripts/model_summary.py` | Executable Script | Model architecture analysis and statistics | `python test_scripts/model_summary.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
 | `README.md` | Documentation | Project description | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |

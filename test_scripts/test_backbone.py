@@ -2,8 +2,11 @@ import torch
 import sys
 import os
 
-# 这一步是为了让 Python 能找到 models 文件夹里的代码
-sys.path.append(os.getcwd())
+# Add project root so Python can find the models package (works from repo root or test_scripts/)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 try:
     print("Step 1: 尝试导入 LightweightVisualBackbone...")
@@ -15,10 +18,10 @@ except ImportError as e:
     exit()
 
 def test_yolo():
-    print("\nStep 2: 正在初始化 YOLOv8n 模型 (这可能需要下载权重)...")
+    print("\nStep 2: 正在初始化 YOLOv8n 模型 (权重从 weights/ 加载或下载)...")
     try:
-        # 实例化模型，这里会自动下载 yolov8n.pt
-        backbone = LightweightVisualBackbone(backbone_type="yolov8n", pretrained=True)
+        # 实例化模型，yolov8n.pt 从 weights/ 加载或下载到 weights/
+        backbone = LightweightVisualBackbone(backbone_type="yolov8n", pretrained=True, weights_dir="weights")
         print("✅ 模型初始化成功！")
     except Exception as e:
         print(f"❌ 模型初始化崩溃: {e}")

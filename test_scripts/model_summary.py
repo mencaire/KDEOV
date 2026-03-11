@@ -8,8 +8,8 @@ This script provides comprehensive information about the KDEOV model:
 - Input/output shapes
 - Memory usage estimates
 
-Usage:
-    python model_summary.py [--backbone BACKBONE] [--fusion FUSION] [--static]
+Usage (from project root):
+    python test_scripts/model_summary.py [--backbone BACKBONE] [--fusion FUSION] [--static]
     
 Options:
     --backbone BACKBONE    Backbone type: yolov8n, yolov5s, or simple (default: yolov8n)
@@ -26,8 +26,11 @@ import sys
 import os
 import argparse
 
-# Add project root to path
-sys.path.append(os.getcwd())
+# Add project root to path (works when run from repo root or from test_scripts/)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 # Try to import required modules
 MODELS_AVAILABLE = False
