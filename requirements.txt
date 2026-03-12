@@ -5,9 +5,11 @@
 
 numpy
 Pillow
+pycocotools  # Required for COCO2017; optional if only using COCO128
 ftfy
 regex
 tqdm
+requests
 ultralytics  # For YOLOv8
 # For YOLOv8 (alternative):
 # git+https://github.com/ultralytics/yolov8.git

@@ -6,13 +6,15 @@ This script demonstrates how to train the KDEOV model using:
 - Cross-Modal Alignment Loss (image-text contrastive loss)
 """
 
+import argparse
+import os
+from typing import Dict, Optional
+
+import clip  # type: ignore
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from typing import Dict, Optional
-import os
-import clip  # type: ignore
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
@@ -211,7 +213,6 @@ def train_feature_alignment(
         batch_losses = []
         
         for batch_idx, (images, texts) in enumerate(dataloader):
-            # 关键修改：数据搬运使用 .to(device) 而不是 .cuda()
             images = images.to(device)
             texts = texts.to(device)
             
@@ -351,48 +352,131 @@ def train_feature_alignment(
 
 
 if __name__ == "__main__":
-    # Example usage
-    # Get device (support Mac MPS, NVIDIA CUDA, or CPU)
+    parser = argparse.ArgumentParser(description="KDEOV Feature Alignment Training")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="coco128",
+        choices=["coco128", "coco2017", "lvis", "coco_lvis", "dummy"],
+        help="Dataset: coco128(测试) | coco2017 | lvis(OVOD) | coco_lvis(COCO+LVIS) | dummy",
+    )
+    parser.add_argument(
+        "--data-root",
+        type=str,
+        default="datasets",
+        help="Root directory for datasets",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="train",
+        choices=["train", "val"],
+        help="Data split: train (for training) or val (for validation only)",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=10,
+        help="Number of training epochs",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=1e-4,
+        help="Learning rate",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="Batch size",
+    )
+    parser.add_argument(
+        "--save-path",
+        type=str,
+        default="checkpoints/kdeov",
+        help="Checkpoint save path (prefix)",
+    )
+    parser.add_argument(
+        "--backbone",
+        type=str,
+        default="yolov8n",
+        choices=["yolov8n", "yolov5s"],
+        help="Visual backbone type",
+    )
+    args = parser.parse_args()
+
     device = get_device()
     print(f"Using device: {device}")
-    
-    # Initialize model on available device (checkpoints loaded from weights/)
+
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
-        backbone_type="yolov8n",
+        backbone_type=args.backbone,
         fusion_type="film",
-        weights_dir="weights"
+        weights_dir="weights",
     ).to(device)
-    
-    # Example: Create a dummy dataset
-    # In practice, you would use a real dataset with image-text pairs
-    class DummyDataset(torch.utils.data.Dataset):
-        def __init__(self, num_samples=1000):
-            self.num_samples = num_samples
-            self.tokenizer = clip.tokenize
-        
-        def __len__(self):
-            return self.num_samples
-        
-        def __getitem__(self, idx):
-            # Dummy image (3, 224, 224)
-            image = torch.randn(3, 224, 224)
-            # Dummy text
-            text = "a photo of a cat"
-            text_tokens = self.tokenizer([text])[0]
-            return image, text_tokens
-    
-    # Create dataloader
-    dataset = DummyDataset(num_samples=1000)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-    
-    # Train
+
+    if args.dataset == "dummy":
+        class DummyDataset(torch.utils.data.Dataset):
+            def __init__(self, num_samples=1000):
+                self.num_samples = num_samples
+                self.tokenizer = clip.tokenize
+
+            def __len__(self):
+                return self.num_samples
+
+            def __getitem__(self, idx):
+                image = torch.randn(3, 224, 224)
+                text = "a photo of a cat"
+                text_tokens = self.tokenizer([text])[0]
+                return image, text_tokens
+
+        dataset = DummyDataset(num_samples=1000)
+    elif args.dataset in ("coco128", "coco2017"):
+        from data.coco_dataset import COCODataset
+
+        dataset = COCODataset(
+            data_root=args.data_root,
+            dataset_name=args.dataset,
+            split=args.split,
+        )
+    elif args.dataset == "lvis":
+        from data.lvis_dataset import LVISDataset
+
+        dataset = LVISDataset(
+            data_root=args.data_root,
+            split=args.split,
+        )
+    elif args.dataset == "coco_lvis":
+        from data.coco_dataset import COCODataset
+        from data.lvis_dataset import LVISDataset
+
+        ds_coco = COCODataset(
+            data_root=args.data_root,
+            dataset_name="coco2017",
+            split=args.split,
+        )
+        ds_lvis = LVISDataset(
+            data_root=args.data_root,
+            split=args.split,
+        )
+        dataset = torch.utils.data.ConcatDataset([ds_coco, ds_lvis])
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=0,
+        pin_memory=True if torch.cuda.is_available() else False,
+    )
+
+    print(f"Dataset: {args.dataset}, split: {args.split}, samples: {len(dataset)}")
     print("Starting feature alignment pretraining...")
     train_feature_alignment(
         model=model,
         dataloader=dataloader,
-        num_epochs=5,
-        learning_rate=1e-4,
-        save_path="checkpoints/kdeov"
+        num_epochs=args.epochs,
+        learning_rate=args.lr,
+        save_path=args.save_path,
     )
 

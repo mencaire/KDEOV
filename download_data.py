@@ -11,12 +11,20 @@ import argparse
 DATA_ROOT = "datasets"
 COCO128_DIR = os.path.join(DATA_ROOT, "coco128")
 COCO2017_DIR = os.path.join(DATA_ROOT, "coco2017")
+LVIS_DIR = os.path.join(DATA_ROOT, "lvis")
 
 # COCO 2017 下载链接
 COCO2017_URLS = {
     "train2017": "http://images.cocodataset.org/zips/train2017.zip",
     "val2017": "http://images.cocodataset.org/zips/val2017.zip",
     "annotations": "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
+}
+
+# LVIS 下载链接 (LVIS 使用 COCO 2017 图像，只需下载标注)
+# 官方: https://www.lvisdataset.org/
+LVIS_URLS = {
+    "lvis_v1_train": "https://dl.fbaipublicfiles.com/LVIS/lvis_v1_train.json.zip",
+    "lvis_v1_val": "https://dl.fbaipublicfiles.com/LVIS/lvis_v1_val.json.zip",
 }
 
 # ----------------------
@@ -124,31 +132,87 @@ def download_coco2017(parts):
             print(f"🗑️ 删除压缩包: {filename} (释放空间)")
             os.remove(zip_path)
 
+
+def download_lvis(parts=None):
+    """
+    下载 LVIS 标注文件。
+    LVIS 使用 COCO 2017 图像，需先运行: python download_data.py --dataset coco2017
+    """
+    if parts is None:
+        parts = ["lvis_v1_train", "lvis_v1_val"]
+
+    # 检查 COCO2017 图像是否存在
+    train_img_dir = os.path.join(COCO2017_DIR, "train2017")
+    val_img_dir = os.path.join(COCO2017_DIR, "val2017")
+    if not os.path.exists(train_img_dir):
+        print("⚠️  LVIS 需要 COCO 2017 图像，请先运行:")
+        print("   python download_data.py --dataset coco2017 --parts train2017 val2017")
+        return
+    if "lvis_v1_val" in parts and not os.path.exists(val_img_dir):
+        print("⚠️  LVIS val 需要 val2017 图像，请确保已下载 COCO val2017")
+
+    ann_dir = os.path.join(LVIS_DIR, "annotations")
+    os.makedirs(ann_dir, exist_ok=True)
+
+    for part in parts:
+        if part not in LVIS_URLS:
+            continue
+        json_name = part + ".json"
+        json_path = os.path.join(ann_dir, json_name)
+        if os.path.exists(json_path):
+            print(f"✅ {json_name} 已存在，跳过。")
+            continue
+
+        url = LVIS_URLS[part]
+        zip_path = os.path.join(LVIS_DIR, part + ".zip")
+        download_file(url, zip_path)
+        extract_zip(zip_path, ann_dir)
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+            print(f"🗑️ 删除压缩包: {part}.zip")
+
+    # 若解压到子目录或 LVIS_DIR 根目录，移动到 annotations
+    for root, _, files in os.walk(LVIS_DIR, topdown=False):
+        for f in files:
+            if f.endswith(".json") and "lvis" in f:
+                src = os.path.join(root, f)
+                dst = os.path.join(ann_dir, f)
+                if src != dst and os.path.exists(src):
+                    if not os.path.exists(dst):
+                        shutil.move(src, dst)
+                        print(f"📁 移动 {f} -> annotations/")
+
 # ----------------------
 # 主程序
 # ----------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="KDEOV 数据集下载助手")
+    parser = argparse.ArgumentParser(description="KDEOV 数据集下载助手 (COCO + LVIS)")
     parser.add_argument(
-        "--dataset", 
-        type=str, 
-        default="coco128", 
-        choices=["coco128", "coco2017"],
-        help="选择数据集: coco128 (测试用) 或 coco2017 (训练用)"
+        "--dataset",
+        type=str,
+        default="coco128",
+        choices=["coco128", "coco2017", "lvis", "coco_lvis"],
+        help="coco128(测试) | coco2017(训练) | lvis(OVOD标注) | coco_lvis(COCO+LVIS 全量)"
     )
     parser.add_argument(
-        "--parts", 
-        nargs="+", 
-        default=["train2017", "val2017", "annotations"],
-        help="COCO2017 下载部分: train2017 val2017 annotations"
+        "--parts",
+        nargs="+",
+        default=None,
+        help="COCO2017: train2017 val2017 annotations | LVIS: lvis_v1_train lvis_v1_val"
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.dataset == "coco128":
         download_coco128()
     elif args.dataset == "coco2017":
-        download_coco2017(parts=args.parts)
-        
+        download_coco2017(parts=args.parts or ["train2017", "val2017", "annotations"])
+    elif args.dataset == "lvis":
+        download_lvis(parts=args.parts or ["lvis_v1_train", "lvis_v1_val"])
+    elif args.dataset == "coco_lvis":
+        print("📦 下载 COCO + LVIS (Open-Vocabulary 推荐配置)...")
+        download_coco2017(parts=["train2017", "val2017", "annotations"])
+        download_lvis(parts=["lvis_v1_train", "lvis_v1_val"])
+
     print("\n🎉 所有任务完成！")
 

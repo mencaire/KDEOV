@@ -28,16 +28,25 @@ See **[models/README.md](./models/README.md)** for detailed architecture and API
 
 ## Installation
 
-## Data Preparation (Mini Dataset)
+## Data Preparation
 
-To ensure consistency across development environments (Mac/Linux/Windows), we use the **COCO128** dataset (a small 128-image subset of COCO) for testing and debugging.
-
-**Do not download data manually.** Instead, run the automated script:
+**Do not download data manually.** Use the automated script:
 
 ```bash
-# This script will create a 'datasets/' folder and download COCO128 automatically
-python download_data.py
+# COCO128 (quick test, 128 images)
+python download_data.py --dataset coco128
+
+# COCO2017 (full training)
+python download_data.py --dataset coco2017 --parts train2017 val2017 annotations
+
+# LVIS (OVOD benchmark, requires COCO2017 images)
+python download_data.py --dataset lvis
+
+# COCO + LVIS (recommended for Open-Vocabulary Object Detection)
+python download_data.py --dataset coco_lvis
 ```
+
+See **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)** for the full COCO + LVIS training workflow.
 
 ## Environment Setup
 
