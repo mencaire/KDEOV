@@ -46,7 +46,7 @@ python download_data.py --dataset lvis
 python download_data.py --dataset coco_lvis
 ```
 
-See **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)** for the full COCO + LVIS training workflow.
+**Minimal workflow:** run COCO128 (sanity check), then download and train with `coco_lvis`. See **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)** for the full COCO + LVIS training workflow.
 
 ## Environment Setup
 

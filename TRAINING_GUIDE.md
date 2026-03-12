@@ -41,11 +41,12 @@ COCO128 only has a train split (128 images). COCO2017 and LVIS both use train201
 
 **LVIS uses COCO 2017 images**—you only need to download LVIS annotations separately. The images are shared.
 
-**Recommended workflow:**
-1. **Phase 1:** COCO128 — verify pipeline
-2. **Phase 2a:** COCO2017 — baseline training
-3. **Phase 2b:** Download LVIS, train on LVIS or coco_lvis
-4. **Phase 3:** Evaluate on LVIS val (OVOD benchmark)
+**Minimal workflow (two steps):**
+1. **Phase 1:** COCO128 — verify pipeline works
+2. **Phase 2:** Download `coco_lvis` data, then train with `--dataset coco_lvis`
+3. **Phase 3:** Evaluate on LVIS val (OVOD benchmark)
+
+You do **not** need to train on COCO2017 or LVIS separately first. Training on `coco_lvis` once uses both COCO and LVIS annotations in a single run. The options to train on `coco2017` only or `lvis` only are **alternatives** (e.g. for ablation or when you want a baseline with 80 classes only).
 
 ---
 
@@ -100,7 +101,7 @@ python train_feature_alignment.py --dataset coco128 --epochs 5 --batch-size 16
 
 ## 5. Phase 2: Full Training (COCO + LVIS)
 
-### Option A: One-Command Download (Recommended)
+### Step 5.1: Download Data (one command)
 
 Download COCO2017 images + COCO annotations + LVIS annotations in one go:
 
@@ -115,7 +116,17 @@ This creates:
 
 **Note:** Download can take 30–60 minutes.
 
-### Option B: Step-by-Step Download
+### Step 5.2: Train on COCO + LVIS (recommended)
+
+```bash
+python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco_lvis
+```
+
+This uses both COCO and LVIS annotations in a single training run. **This is all you need** for OVOD after the Phase 1 sanity check.
+
+### Optional: Step-by-Step Download
+
+If you prefer to download in stages:
 
 ```bash
 # 1. COCO2017 (images + annotations)
@@ -125,25 +136,12 @@ python download_data.py --dataset coco2017 --parts train2017 val2017 annotations
 python download_data.py --dataset lvis
 ```
 
-### Step 5.1: Train on COCO2017 (Baseline)
+### Optional: Other Training Modes
 
-```bash
-python train_feature_alignment.py --dataset coco2017 --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco
-```
+- **COCO only (80 classes):** `python train_feature_alignment.py --dataset coco2017 --split train --epochs 10 --save-path checkpoints/kdeov_coco`
+- **LVIS only (1,203 classes):** `python train_feature_alignment.py --dataset lvis --split train --epochs 10 --save-path checkpoints/kdeov_lvis`
 
-### Step 5.2: Train on LVIS (OVOD Benchmark)
-
-```bash
-python train_feature_alignment.py --dataset lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_lvis
-```
-
-### Step 5.3: Train on COCO + LVIS (Combined, Best for OVOD)
-
-```bash
-python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco_lvis
-```
-
-This uses both COCO and LVIS annotations (same images, different class vocabularies) for richer training.
+Use these only if you need a baseline or an ablation; the minimal path is coco128 → coco_lvis.
 
 ---
 
@@ -153,7 +151,7 @@ This uses both COCO and LVIS annotations (same images, different class vocabular
 
 ### Step 6.1: Load Trained Checkpoint
 
-Use the checkpoint from `checkpoints/` (e.g. `kdeov_lvis_epoch_10.pt`).
+Use the checkpoint from `checkpoints/` (e.g. `kdeov_coco_lvis_epoch_10.pt` or `kdeov_lvis_epoch_10.pt`).
 
 ### Step 6.2: Evaluate on LVIS Val (OVOD Benchmark)
 
@@ -164,7 +162,7 @@ from models import KDEOVModel
 import torch
 
 model = KDEOVModel(clip_model_name="ViT-B/32", backbone_type="yolov8n", fusion_type="film")
-model.load_state_dict(torch.load("checkpoints/kdeov_lvis_epoch_10.pt")["model_state_dict"])
+model.load_state_dict(torch.load("checkpoints/kdeov_coco_lvis_epoch_10.pt")["model_state_dict"])
 
 # Use val2017 images + LVIS class names for OVOD evaluation
 boxes, scores, labels = model.open_vocabulary_detect(
@@ -206,25 +204,37 @@ Run: `pip install pycocotools`
 
 ## Quick Reference: Command Summary
 
+**Minimal path (coco128 → coco_lvis):**
+
+| Step | Task | Command |
+|------|------|---------|
+| 1 | Download COCO128 | `python download_data.py --dataset coco128` |
+| 1 | Train sanity check | `python train_feature_alignment.py --dataset coco128 --epochs 5` |
+| 2 | Download COCO + LVIS | `python download_data.py --dataset coco_lvis` |
+| 2 | Full OVOD training | `python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --save-path checkpoints/kdeov_coco_lvis` |
+
+**Other options:**
+
 | Task | Command |
 |------|---------|
-| Download COCO128 | `python download_data.py --dataset coco128` |
-| Download COCO2017 | `python download_data.py --dataset coco2017 --parts train2017 val2017 annotations` |
-| Download LVIS | `python download_data.py --dataset lvis` |
-| Download COCO + LVIS (all) | `python download_data.py --dataset coco_lvis` |
-| Train on COCO128 (quick test) | `python train_feature_alignment.py --dataset coco128 --epochs 5` |
-| Train on COCO2017 | `python train_feature_alignment.py --dataset coco2017 --split train --epochs 10` |
-| Train on LVIS | `python train_feature_alignment.py --dataset lvis --split train --epochs 10` |
-| Train on COCO + LVIS | `python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10` |
+| Download COCO2017 only | `python download_data.py --dataset coco2017 --parts train2017 val2017 annotations` |
+| Download LVIS only | `python download_data.py --dataset lvis` |
+| Train on COCO2017 only | `python train_feature_alignment.py --dataset coco2017 --split train --epochs 10` |
+| Train on LVIS only | `python train_feature_alignment.py --dataset lvis --split train --epochs 10` |
 | Train with dummy data | `python train_feature_alignment.py --dataset dummy --epochs 3` |
 
 ---
 
 ## Recommended Experiment Order
 
-1. **Day 1:** Phase 1 (COCO128) — confirm pipeline works
-2. **Day 2:** Run `python download_data.py --dataset coco_lvis`
-3. **Day 3:** Phase 2 — train on coco2017, then lvis or coco_lvis
-4. **Day 4+:** Phase 3 evaluation on LVIS val, tune hyperparameters
+**Minimal path (two steps):**
+1. **Step 1:** Phase 1 (COCO128) — confirm pipeline works  
+   `python download_data.py --dataset coco128` then `python train_feature_alignment.py --dataset coco128 --epochs 5`
+2. **Step 2:** Download data, then train on coco_lvis  
+   `python download_data.py --dataset coco_lvis` then  
+   `python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --save-path checkpoints/kdeov_coco_lvis`
+3. **Step 3:** Phase 3 — evaluate on LVIS val, tune hyperparameters if needed
+
+You do **not** need to train on coco2017 or lvis separately. Training on `coco_lvis` once is sufficient.
 
 Good luck with your FYP!
