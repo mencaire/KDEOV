@@ -286,6 +286,18 @@ This repository contains comprehensive documentation organized into the followin
   - `learning_rate`: Learning rate (default: 1e-4)
   - `save_path`: Checkpoint save path (optional)
 
+#### `eval_detection.py`
+- **Purpose**: Evaluation script for Phase 3 (testing). Computes mAP, AP@50, and (on LVIS) AP_rare/common/frequent on val2017.
+- **Usage**:
+  ```bash
+  # LVIS val (primary OVOD benchmark)
+  python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset lvis
+
+  # COCO val (optional 80-class comparison)
+  python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset coco
+  ```
+- **Options**: `--data-root`, `--batch-size`, `--score-thresh`, `--backbone`. See [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 3.
+
 #### `example_usage.py`
 - **Purpose**: Model usage examples and demonstrations
 - **Included Examples**:
@@ -492,6 +504,10 @@ KDEOV/
 │                                      # Purpose: Train KDEOV model
 │                                      # Execution: python train_feature_alignment.py
 │
+├── eval_detection.py                 # Evaluation script (Phase 3)
+│                                      # Purpose: mAP / AP@50 on LVIS val or COCO val
+│                                      # Execution: python eval_detection.py --checkpoint <path> --dataset lvis
+│
 ├── example_usage.py                  # Model usage examples
 │                                      # Purpose: Demonstrate zero-shot classification, text-image retrieval, etc.
 │                                      # Execution: python example_usage.py
@@ -533,6 +549,7 @@ KDEOV/
 | `models/kdeov_model.py` | Python Module | Main model class | `from models import KDEOVModel` |
 | `models/losses.py` | Python Module | Loss functions | `from models import FeatureAlignmentLoss` |
 | `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
+| `eval_detection.py` | Executable Script | Evaluation (mAP, AP@50 on val) | `python eval_detection.py --checkpoint <path> --dataset lvis` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
 | `test_scripts/test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_scripts/test_environment.py` |
 | `test_scripts/test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_scripts/test_backbone.py` |

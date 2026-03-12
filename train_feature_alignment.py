@@ -404,6 +404,13 @@ if __name__ == "__main__":
         choices=["yolov8n", "yolov5s"],
         help="Visual backbone type",
     )
+    parser.add_argument(
+        "--fusion",
+        type=str,
+        default="film",
+        choices=["film", "cross_attention"],
+        help="Fusion module: film or cross_attention (for ablation)",
+    )
     args = parser.parse_args()
 
     device = get_device()
@@ -412,7 +419,7 @@ if __name__ == "__main__":
     model = KDEOVModel(
         clip_model_name="ViT-B/32",
         backbone_type=args.backbone,
-        fusion_type="film",
+        fusion_type=args.fusion,
         weights_dir="weights",
     ).to(device)
 
