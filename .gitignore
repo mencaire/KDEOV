@@ -21,3 +21,6 @@ __pycache__/
 weights/**/*.pt
 weights/
 *.pt
+
+# --- 训练 checkpoint 与曲线图 ---
+checkpoints/
