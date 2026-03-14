@@ -93,7 +93,12 @@ class LVISDataset(Dataset):
         self.image_paths: List[str] = []
         self.img_ids: List[int] = []
         for img_id, img_info in self.images.items():
-            fname = img_info["file_name"]
+            # LVIS JSON may have "file_name" or only "coco_url" (e.g. http://.../train2017/000000123.jpg)
+            fname = img_info.get("file_name")
+            if fname is None and "coco_url" in img_info:
+                fname = img_info["coco_url"].rstrip("/").split("/")[-1]
+            if not fname:
+                continue
             path = img_dir / fname
             if path.exists():
                 self.image_paths.append(str(path))
