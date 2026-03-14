@@ -146,7 +146,9 @@ def train_feature_alignment(
     dataloader: DataLoader,
     num_epochs: int = 10,
     learning_rate: float = 1e-4,
-    save_path: Optional[str] = None
+    save_path: Optional[str] = None,
+    resume_checkpoint: Optional[dict] = None,
+    start_epoch: int = 0
 ):
     """
     Train model with feature alignment pretraining
@@ -192,7 +194,10 @@ def train_feature_alignment(
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=num_epochs
     )
-    
+    if resume_checkpoint is not None:
+            optimizer.load_state_dict(resume_checkpoint["optimizer_state_dict"])
+            scheduler.last_epoch = start_epoch - 1  # 匹配已训练步数
+            print(f"✅ 已恢复优化器和学习率调度器状态")
     model.train()
     
     # Track loss history
@@ -203,7 +208,7 @@ def train_feature_alignment(
     }
     best_loss = float('inf')
     
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         total_loss = 0.0
         total_dist_loss = 0.0
         total_align_loss = 0.0
@@ -398,6 +403,12 @@ if __name__ == "__main__":
         help="Checkpoint save path (prefix)",
     )
     parser.add_argument(
+        "--resume",
+        type=str,
+        default="",
+        help="Resume training from a checkpoint .pt file path",
+    )
+    parser.add_argument(
         "--backbone",
         type=str,
         default="yolov8n",
@@ -422,6 +433,14 @@ if __name__ == "__main__":
         fusion_type=args.fusion,
         weights_dir="weights",
     ).to(device)
+    start_epoch = 0
+    resume_checkpoint = None
+    if args.resume and os.path.exists(args.resume):
+        print(f"✅ 加载断点权重: {args.resume}")
+        resume_checkpoint = torch.load(args.resume, map_location=device)
+        model.load_state_dict(resume_checkpoint["model_state_dict"])
+        start_epoch = resume_checkpoint["epoch"] + 1  # 从下一个epoch开始
+        print(f"   已训到epoch {resume_checkpoint['epoch']+1}，将从epoch {start_epoch+1} 继续训练")
 
     if args.dataset == "dummy":
         class DummyDataset(torch.utils.data.Dataset):
@@ -485,5 +504,7 @@ if __name__ == "__main__":
         num_epochs=args.epochs,
         learning_rate=args.lr,
         save_path=args.save_path,
+        resume_checkpoint=resume_checkpoint,  # 新增
+        start_epoch=start_epoch,  
     )
 

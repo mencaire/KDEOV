@@ -93,7 +93,7 @@ class LVISDataset(Dataset):
         self.image_paths: List[str] = []
         self.img_ids: List[int] = []
         for img_id, img_info in self.images.items():
-            fname = img_info["file_name"]
+            fname = f"{img_info['id']:012d}.jpg"
             path = img_dir / fname
             if path.exists():
                 self.image_paths.append(str(path))
@@ -118,7 +118,7 @@ class LVISDataset(Dataset):
         text_tokens = self.tokenizer([text], truncate=True)[0]
 
         img = Image.open(img_path).convert("RGB")
-        img = img.resize((IMAGE_SIZE, IMAGE_SIZE), Image.BILINEAR)
+        img = img.resize((IMAGE_SIZE, IMAGE_SIZE), Image.Resampling.BILINEAR)
         img_tensor = torch.from_numpy(np.array(img)).permute(2, 0, 1).float() / 255.0
         mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).view(3, 1, 1)
         std = torch.tensor([0.26862954, 0.26130258, 0.27577711]).view(3, 1, 1)
