@@ -9,9 +9,10 @@ This guide provides a step-by-step experimental plan for training KDEOV model us
 3. [Prerequisites](#3-prerequisites)
 4. [Phase 1: Quick Sanity Check (COCO128)](#4-phase-1-quick-sanity-check-coco128)
 5. [Phase 2: Full Training (COCO + LVIS)](#5-phase-2-full-training-coco--lvis)
-6. [Phase 3: Evaluation (Testing)](#6-phase-3-evaluation-testing)
-7. [Troubleshooting](#7-troubleshooting)
-8. [Ablation studies (for your FYP thesis)](#8-ablation-studies-for-your-fyp-thesis)
+6. [Phase 3: Detection fine-tuning (with bbox)](#55-phase-25-detection-fine-tuning-with-bounding-boxes)
+7. [Phase 4: Evaluation (Testing)](#6-phase-3-evaluation-testing)
+8. [Troubleshooting](#7-troubleshooting)
+9. [Ablation studies (for your FYP thesis)](#8-ablation-studies-for-your-fyp-thesis)
 
 ---
 
@@ -40,10 +41,11 @@ COCO128 only has a train split (128 images). COCO2017 and LVIS both use train201
 
 **LVIS uses COCO 2017 images**—you only need to download LVIS annotations separately. The images are shared.
 
-**Minimal workflow (two steps):**
-1. **Phase 1:** COCO128 — verify pipeline works
-2. **Phase 2:** Download `coco_lvis` data, then train with `--dataset coco_lvis`
-3. **Phase 3:** Evaluate on LVIS val (OVOD benchmark)
+**Recommended workflow (Steps 1–4):**
+1. **Step 1 :** COCO128 — verify pipeline works
+2. **Step 2 :** Download `coco_lvis`, then **feature alignment** with `--dataset coco_lvis`
+3. **Step 3 :** **Fine-tuning** with bbox labels (COCO train) — recommended before reporting metrics
+4. **Step 4 :** Evaluate on LVIS val (OVOD benchmark)
 
 You do **not** need to train on COCO2017 or LVIS separately first. Training on `coco_lvis` once uses both COCO and LVIS annotations in a single run. The options to train on `coco2017` only or `lvis` only are **alternatives** (e.g. for ablation or when you want a baseline with 80 classes only).
 
@@ -72,9 +74,9 @@ python test_scripts/test_environment.py
 
 ---
 
-## 4. Phase 1: Quick Sanity Check (COCO128)
+## 4. Phase 1: Quick Sanity Check (COCO128) — Step 1
 
-**Goal:** Verify the training pipeline works before spending hours on full data.
+**Goal:** Verify the training pipeline works before spending hours on full data. This is **Step 1** in the recommended order.
 
 **Type in terminal:**
 
@@ -89,9 +91,9 @@ python train_feature_alignment.py --dataset coco128 --epochs 5 --batch-size 16
 
 ---
 
-## 5. Phase 2: Full Training (COCO + LVIS)
+## 5. Phase 2: Full Training (COCO + LVIS) — Step 2
 
-### Step 5.1: Download Data
+### Step 2.1: Download Data
 
 **Type in terminal (download can take 30–60 minutes):**
 
@@ -101,7 +103,7 @@ python download_data.py --dataset coco_lvis
 
 This creates `datasets/coco2017/` (images + COCO annotations) and `datasets/lvis/annotations/` (LVIS JSONs).
 
-### Step 5.2: Train on COCO + LVIS
+### Step 2.2: Train on COCO + LVIS
 
 **Type in terminal:**
 
@@ -109,7 +111,7 @@ This creates `datasets/coco2017/` (images + COCO annotations) and `datasets/lvis
 python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco_lvis
 ```
 
-This uses both COCO and LVIS annotations in a single training run. **This is all you need** for OVOD after the Phase 1 sanity check.
+This uses both COCO and LVIS annotations in a single training run. **This is all you need** for Step 2 (feature alignment) after the Step 1 sanity check.
 
 ### Optional: Step-by-Step Download
 
@@ -132,9 +134,42 @@ Use these only if you need a baseline or an ablation; the minimal path is coco12
 
 ---
 
-## 6. Phase 3: Evaluation (Testing)
+## 6 Phase 3: Detection fine-tuning (with bounding boxes) — Step 3
 
-**Goal:** Run your trained model on the validation set and report evaluation metrics for your report/paper.
+**Goal:** After Step 2 (feature alignment), fine-tune the model using **bounding box labels** from the training set so that spatial features at object locations predict the correct class. This step uses the same data you already downloaded (COCO train2017 + `instances_train2017.json`); no extra download.
+
+**Why fine-tune?** Feature alignment alone trains image–text similarity without bbox supervision. Fine-tuning with bbox teaches the model *where* to look: the grid cell at each object’s center is trained to have high similarity to that object’s class. Papers usually report metrics **after** this step.
+
+**Data used:** COCO **train2017** images and **instances_train2017.json** (80 classes, bbox in the JSON). The script resizes images to 224×224 and scales boxes accordingly.
+
+### Step 3.1: Run fine-tuning
+
+**Type in terminal (after Step 2 feature alignment has finished):**
+
+```bash
+python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 5 --batch-size 16 --save-path checkpoints/kdeov_finetune
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|--------|--------------|
+| `--checkpoint` | (required) | Feature-alignment checkpoint (e.g. `kdeov_coco_lvis_epoch_10.pt`) |
+| `--data-root` | `datasets` | Root for `coco2017/train2017` and `annotations/instances_train2017.json` |
+| `--save-path` | `checkpoints/kdeov_finetune` | Directory where `kdeov_finetune.pt` is saved |
+| `--epochs` | 5 | Number of fine-tuning epochs |
+| `--batch-size` | 16 | Batch size (smaller than feature alignment if GPU memory is tight) |
+| `--lr` | 1e-5 | Learning rate for fine-tuning |
+| `--backbone` | yolov8n | Must match the backbone used in the checkpoint |
+| `--fusion` | film | Must match the fusion used in the checkpoint |
+
+**Output:** Saved checkpoint path: `checkpoints/kdeov_finetune/kdeov_finetune.pt`. Use this checkpoint in Step 4 (evaluation).
+
+---
+
+## 7. Phase 4: Evaluation (Testing) — Step 4
+
+**Goal:** Run your trained model on the validation set and report evaluation metrics for your report/paper. This is **Step 4** in the recommended order.
 
 ### 6.1 What to Evaluate On (Which Data)
 
@@ -167,16 +202,20 @@ These are the numbers you put in your “Experimental Results” section.
 
 ### 6.3 Run the Evaluation Script
 
+Use the **fine-tuned** checkpoint if you ran Step 3; otherwise use the Step 2 (feature-alignment) checkpoint.
+
 **Type in terminal (LVIS val — primary):**
 
 ```bash
-python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset lvis
+python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset lvis
 ```
+
+*(If you skipped fine-tuning, use:* `--checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt` *instead.)*
 
 **Type in terminal (COCO val — optional):**
 
 ```bash
-python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset coco
+python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset coco
 ```
 
 **Options:**
@@ -240,15 +279,16 @@ For full LVIS metrics (AP, AP_rare, etc.), install the LVIS API: `pip install lv
 
 ## Quick Reference: Command Summary
 
-**Minimal path (coco128 → coco_lvis → evaluation):**
+**Minimal path (coco128 → coco_lvis → fine-tuning → evaluation):**
 
 | Step | Task | Command / Action |
 |------|------|------------------|
 | 1 | Download COCO128 | `python download_data.py --dataset coco128` |
 | 1 | Train sanity check | `python train_feature_alignment.py --dataset coco128 --epochs 5` |
 | 2 | Download COCO + LVIS | `python download_data.py --dataset coco_lvis` |
-| 2 | Full OVOD training | `python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --save-path checkpoints/kdeov_coco_lvis` |
-| 3 | Evaluation (testing) | `python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset lvis` (and optionally `--dataset coco`). See Phase 3 (§6). |
+| 2 | Full OVOD training (feature alignment) | `python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --save-path checkpoints/kdeov_coco_lvis` |
+| 3 | Fine-tuning (bbox) | `python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 5 --save-path checkpoints/kdeov_finetune` |
+| 4 | Evaluation (testing) | `python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset lvis` (and optionally `--dataset coco`). See §6 (Step 4). |
 
 **Other options:**
 
@@ -274,7 +314,7 @@ python download_data.py --dataset coco128
 python train_feature_alignment.py --dataset coco128 --epochs 5 --batch-size 16
 ```
 
-**Step 2 — Full data and training (COCO + LVIS):**
+**Step 2 — Full data and feature alignment (COCO + LVIS):**
 ```bash
 python download_data.py --dataset coco_lvis
 ```
@@ -282,13 +322,18 @@ python download_data.py --dataset coco_lvis
 python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco_lvis
 ```
 
-**Step 3 — Evaluation (get mAP, AP@50):**
+**Step 3 — Fine-tuning with bounding boxes (COCO train):**
 ```bash
-python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset lvis
+python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 5 --batch-size 16 --save-path checkpoints/kdeov_finetune
 ```
-*(Optional: also run with `--dataset coco` for 80-class metrics.)*
+
+**Step 4 — Evaluation (get mAP, AP@50, LVIS AP):**
 ```bash
-python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset coco
+python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset lvis
+```
+*(Optional: COCO val 80-class metrics.)*
+```bash
+python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset coco
 ```
 
 No other scripts are required. The numbers printed at the end of the eval commands are what you report as your experimental results.
@@ -312,7 +357,7 @@ Typical FYP/paper ablations show how each design choice affects the final metric
 | **Batch size** | `--batch-size 16` vs `--batch-size 32` | Can affect convergence (and GPU memory). |
 | **Fusion type** | `--fusion film` vs `--fusion cross_attention` | FiLM vs cross-attention (model supports both). |
 
-Use different **`--save-path`** per run so you keep separate checkpoints. Example commands (run after Step 2 data is ready):
+Use different **`--save-path`** per run so you keep separate checkpoints. Example commands (run after Step 2 data and feature alignment are ready):
 
 - **Backbone ablation (yolov5s):**  
   `python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --backbone yolov5s --save-path checkpoints/ablation_yolov5s`  
