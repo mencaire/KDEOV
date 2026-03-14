@@ -424,6 +424,29 @@ class SpatialProjection(nn.Module):
         return out
 
 
+class BBoxRegressionHead(nn.Module):
+    """
+    Lightweight bbox regression head for refining default grid boxes.
+    One 1x1 conv: [B, C, Hf, Wf] -> [B, 4, Hf, Wf] (dx1, dy1, dx2, dy2 in pixel offsets).
+    Initialized so initial predictions are near zero (refined box ≈ default box).
+    """
+
+    def __init__(self, input_dim: int):
+        super().__init__()
+        self.conv = nn.Conv2d(input_dim, 4, kernel_size=1)
+        nn.init.zeros_(self.conv.bias)
+        nn.init.xavier_uniform_(self.conv.weight, gain=0.01)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: [batch_size, input_dim, Hf, Wf] (fused backbone features)
+        Returns:
+            [batch_size, 4, Hf, Wf] offsets (dx1, dy1, dx2, dy2) in image pixel space
+        """
+        return self.conv(x)
+
+
 def grid_boxes_to_image(
     feat_h: int,
     feat_w: int,

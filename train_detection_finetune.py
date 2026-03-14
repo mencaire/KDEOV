@@ -19,6 +19,7 @@ import clip
 from tqdm import tqdm
 
 from models import KDEOVModel
+from models.components import grid_boxes_to_image
 from data.detection_dataset import COCODetectionDataset, collate_detection
 
 IMAGE_SIZE = 224
@@ -64,7 +65,11 @@ def train_finetune(
         fusion_type=fusion,
         weights_dir="weights",
     )
-    model.load_state_dict(ckpt["model_state_dict"], strict=True)
+    load_ret = model.load_state_dict(ckpt["model_state_dict"], strict=False)
+    if load_ret.missing_keys:
+        print(f"Note: loading with strict=False. Missing keys (e.g. bbox_regression_head): {load_ret.missing_keys[:5]}{'...' if len(load_ret.missing_keys) > 5 else ''}")
+    if load_ret.unexpected_keys:
+        print(f"Unexpected keys in checkpoint: {load_ret.unexpected_keys[:5]}...")
     model = model.to(device)
     model.train()
 
@@ -100,34 +105,54 @@ def train_finetune(
                 text_emb = F.normalize(text_emb, dim=-1)
                 text_emb_fusion = text_emb.mean(dim=0, keepdim=True)
 
-            spatial_emb = model.get_spatial_embeddings(images, text_emb_fusion, use_fusion=True)
+            spatial_emb, fused_features = model.get_spatial_embeddings_and_fused(
+                images, text_emb_fusion, use_fusion=True
+            )
             b, d, hf, wf = spatial_emb.shape
             num_cells = hf * wf
             spatial_flat = spatial_emb.permute(0, 2, 3, 1).reshape(b, num_cells, d)
             logits = torch.matmul(spatial_flat, text_emb.t())
 
-            loss_sum = 0.0
-            count = 0
+            # Bbox regression: default boxes and predicted offsets
+            default_boxes = grid_boxes_to_image(
+                hf, wf, IMAGE_SIZE, IMAGE_SIZE, cell_scale=2.0, device=device
+            )
+            bbox_offsets = model.bbox_regression_head(fused_features)  # [B, 4, Hf, Wf]
+
+            cls_loss_sum = 0.0
+            reg_loss_sum = 0.0
+            count_cls = 0
+            count_reg = 0
             for i in range(b):
                 n = (labels[i] >= 0).sum().item()
                 if n == 0:
                     continue
                 boxes_i = boxes[i][:n]
                 labels_i = labels[i][:n]
-                cell_idx = box_center_to_cell(boxes_i, hf, wf)
+                cell_indices = box_center_to_cell(boxes_i, hf, wf)
                 logits_i = logits[i]
-                logits_at_cell = logits_i[cell_idx]
-                loss_sum += F.cross_entropy(logits_at_cell, labels_i)
-                count += 1
-            if count == 0:
+                logits_at_cell = logits_i[cell_indices]
+                cls_loss_sum += F.cross_entropy(logits_at_cell, labels_i)
+                count_cls += 1
+                for j in range(n):
+                    cidx = cell_indices[j].item()
+                    iy, ix = cidx // wf, cidx % wf
+                    target_offset = boxes_i[j] - default_boxes[cidx].to(device)
+                    pred_offset = bbox_offsets[i, :, iy, ix]
+                    reg_loss_sum += F.smooth_l1_loss(pred_offset, target_offset)
+                    count_reg += 1
+            if count_cls == 0:
                 continue
-            loss = loss_sum / max(count, 1)
+            cls_loss = cls_loss_sum / max(count_cls, 1)
+            reg_loss = reg_loss_sum / max(count_reg, 1) if count_reg > 0 else torch.tensor(0.0, device=device)
+            reg_weight = 2.0
+            loss = cls_loss + reg_weight * reg_loss
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
             num_batches += 1
-            pbar.set_postfix(loss=loss.item())
+            pbar.set_postfix(loss=loss.item(), cls=cls_loss.item(), reg=reg_loss.item() if count_reg > 0 else 0.0)
 
         avg_loss = total_loss / max(num_batches, 1)
         print(f"Epoch {epoch+1}/{epochs} avg loss: {avg_loss:.4f}")

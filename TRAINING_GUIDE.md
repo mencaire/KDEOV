@@ -138,7 +138,7 @@ Use these only if you need a baseline or an ablation; the minimal path is coco12
 
 **Goal:** After Step 2 (feature alignment), fine-tune the model using **bounding box labels** from the training set so that spatial features at object locations predict the correct class. This step uses the same data you already downloaded (COCO train2017 + `instances_train2017.json`); no extra download.
 
-**Why fine-tune?** Feature alignment alone trains image–text similarity without bbox supervision. Fine-tuning with bbox teaches the model *where* to look: the grid cell at each object’s center is trained to have high similarity to that object’s class. Papers usually report metrics **after** this step.
+**Why fine-tune?** Feature alignment alone trains image–text similarity without bbox supervision. Fine-tuning with bbox teaches the model *where* to look: the grid cell at each object’s center is trained to have high similarity to that object’s class, and a **lightweight bbox regression head** refines the default grid boxes to better fit objects (Smooth L1 loss). Papers usually report metrics **after** this step.
 
 **Data used:** COCO **train2017** images and **instances_train2017.json** (80 classes, bbox in the JSON). The script resizes images to 224×224 and scales boxes accordingly.
 
@@ -251,6 +251,15 @@ The metrics table is what reviewers and readers will look at as the main “resu
 ### "LVIS 需要 COCO 2017 图像"
 
 Run COCO2017 first: `python download_data.py --dataset coco2017 --parts train2017 val2017`
+
+### "AP / AR are 0" on LVIS or COCO
+
+Evaluation **does** compare the model’s predicted bboxes to ground truth (IoU + category). If AP is still 0 after feature alignment and finetuning, the usual cause is **too many false positives**: the script outputs many detections per image (e.g. 100) at low score (default `--score-thresh 0.1`), so only a tiny fraction match GT, and precision is effectively zero.
+
+- **Quick check:** Run `python debug_eval_iou.py` (from project root) to see how many GT instances get a matching prediction at IoU ≥ 0.5 and the max IoU.
+- **Try a higher score threshold** to reduce FPs and see if AP becomes non-zero, e.g.  
+  `python eval_detection.py --checkpoint ... --dataset lvis --score-thresh 0.2` or `--score-thresh 0.25`.
+- **Longer-term:** The model includes a bbox regression head (trained in Step 3); improve discriminativity with more/better finetuning or background negatives if needed.
 
 ### "LVIS annotations not found"
 

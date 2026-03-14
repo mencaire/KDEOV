@@ -1,6 +1,12 @@
 """
 Evaluation script for KDEOV open-vocabulary object detection (Phase 3).
 
+Evaluation logic: run the KDEoV model on val images to get predicted bboxes
+(boxes, scores, labels); compare these to COCO/LVIS ground-truth bboxes using
+IoU; AP/AR are the standard detection metrics (precision/recall over IoU thresholds).
+Predictions are scaled from model input size (224x224) to original image size before
+comparison so that IoU is computed in the same coordinate system as the GT.
+
 Computes mAP, AP@50, and (for LVIS) AP_rare/common/frequent on val2017.
 Usage:
   # LVIS val (1,203 classes) — primary OVOD benchmark
@@ -73,7 +79,10 @@ def load_coco_val(data_root: str):
         info = coco.loadImgs(iid)[0]
         path = img_dir / info["file_name"]
         if path.exists():
-            img_infos.append({"id": iid, "path": str(path), "file_name": info["file_name"]})
+            img_infos.append({
+                "id": iid, "path": str(path), "file_name": info["file_name"],
+                "width": info["width"], "height": info["height"],
+            })
     return img_infos, class_names, name_to_cat_id
 
 
@@ -101,10 +110,14 @@ def load_lvis_val(data_root: str):
 
     img_infos = []
     for iid in images.keys():
+        img = images[iid]
         # LVIS uses COCO images; path by COCO convention (id zero-padded to 12 digits)
         path = img_dir / f"{iid:012d}.jpg"
         if path.exists():
-            img_infos.append({"id": iid, "path": str(path), "file_name": f"{iid:012d}.jpg"})
+            img_infos.append({
+                "id": iid, "path": str(path), "file_name": f"{iid:012d}.jpg",
+                "width": img["width"], "height": img["height"],
+            })
     return img_infos, class_names, name_to_cat_id
 
 
@@ -130,12 +143,21 @@ def run_eval_coco(model, img_infos, class_names, name_to_cat_id, device, data_ro
                 boxes = out["boxes"].cpu()
                 scores = out["scores"].cpu()
                 labels = out["labels"]
+                orig_w = info["width"]
+                orig_h = info["height"]
+                scale_x = orig_w / IMAGE_SIZE
+                scale_y = orig_h / IMAGE_SIZE
                 for k in range(len(scores)):
                     cat_name = labels[k]
                     cat_id = name_to_cat_id.get(cat_name)
                     if cat_id is None:
                         continue
                     x1, y1, x2, y2 = boxes[k].tolist()
+                    # Scale from model input size (224x224) to original image size for COCO eval
+                    x1 = x1 * scale_x
+                    y1 = y1 * scale_y
+                    x2 = x2 * scale_x
+                    y2 = y2 * scale_y
                     results.append({
                         "image_id": info["id"],
                         "category_id": cat_id,
@@ -166,12 +188,21 @@ def run_eval_lvis(model, img_infos, class_names, name_to_cat_id, device, data_ro
                 boxes = out["boxes"].cpu()
                 scores = out["scores"].cpu()
                 labels = out["labels"]
+                orig_w = info["width"]
+                orig_h = info["height"]
+                scale_x = orig_w / IMAGE_SIZE
+                scale_y = orig_h / IMAGE_SIZE
                 for k in range(len(scores)):
                     cat_name = labels[k]
                     cat_id = name_to_cat_id.get(cat_name)
                     if cat_id is None:
                         continue
                     x1, y1, x2, y2 = boxes[k].tolist()
+                    # Scale from model input size (224x224) to original image size for LVIS eval
+                    x1 = x1 * scale_x
+                    y1 = y1 * scale_y
+                    x2 = x2 * scale_x
+                    y2 = y2 * scale_y
                     results.append({
                         "image_id": info["id"],
                         "category_id": cat_id,
@@ -199,7 +230,10 @@ def run_eval_lvis(model, img_infos, class_names, name_to_cat_id, device, data_ro
         lvis_eval = LVISEval(lvis_gt, results, "bbox")
         lvis_eval.run()
         lvis_eval.print_results()
-        return getattr(lvis_eval, "results", None)
+        res = getattr(lvis_eval, "results", None)
+        if n > 10000:
+            print("\nTip: If AP is 0, many low-score detections can swamp true positives. Try: --score-thresh 0.2 or 0.25")
+        return res
     except ImportError:
         print("LVIS API not installed. Install with: pip install lvis")
         return None
@@ -211,7 +245,8 @@ def main():
     parser.add_argument("--data-root", type=str, default="datasets", help="Root directory for datasets")
     parser.add_argument("--dataset", type=str, choices=["coco", "lvis"], default="lvis", help="Evaluate on COCO val (80 cls) or LVIS val (1203 cls)")
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--score-thresh", type=float, default=0.1)
+    parser.add_argument("--score-thresh", type=float, default=0.1,
+                        help="Min detection score. If AP is 0, try 0.2–0.25 to reduce false positives.")
     parser.add_argument("--backbone", type=str, default="yolov8n", choices=["yolov8n", "yolov5s"])
     parser.add_argument("--fusion", type=str, default="film", choices=["film", "cross_attention"], help="Must match training")
     args = parser.parse_args()
@@ -221,7 +256,9 @@ def main():
     print(f"Loading checkpoint: {args.checkpoint}")
     ckpt = torch.load(args.checkpoint, map_location=device)
     model = KDEOVModel(clip_model_name="ViT-B/32", backbone_type=args.backbone, fusion_type=args.fusion, weights_dir="weights")
-    model.load_state_dict(ckpt["model_state_dict"], strict=True)
+    load_ret = model.load_state_dict(ckpt["model_state_dict"], strict=False)
+    if load_ret.missing_keys:
+        print(f"Note: loaded with strict=False (missing: bbox_regression_head etc.). Refined boxes will not be used.")
     model = model.to(device)
     model.eval()
 

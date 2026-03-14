@@ -32,6 +32,7 @@ from .components import (
     ProjectionNetwork,
     CrossModalFusionModule,
     SpatialProjection,
+    BBoxRegressionHead,
     grid_boxes_to_image,
 )
 
@@ -119,7 +120,8 @@ class KDEOVModel(nn.Module):
             input_dim=backbone_output_dim,
             output_dim=embedding_dim
         )
-        
+        self.bbox_regression_head = BBoxRegressionHead(input_dim=backbone_output_dim)
+
         # 2. CRITICAL: Add Temperature Parameter for Contrastive Learning
         # Initialized to log(1/0.07) following CLIP paper
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
@@ -357,6 +359,25 @@ class KDEOVModel(nn.Module):
         spatial_emb = self.spatial_projection(final_features)
         return spatial_emb
 
+    def get_spatial_embeddings_and_fused(
+        self,
+        images: torch.Tensor,
+        text_embeddings: Optional[torch.Tensor] = None,
+        use_fusion: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get both spatial embeddings and fused backbone features (for bbox regression).
+        Returns (spatial_emb [B,D,Hf,Wf], fused_features [B,C,Hf,Wf]).
+        """
+        visual_features = self.visual_backbone(images)
+        final_features = visual_features[-1] if isinstance(visual_features, list) else visual_features
+        if text_embeddings is not None and use_fusion:
+            if text_embeddings.shape[0] == 1 and final_features.shape[0] > 1:
+                text_embeddings = text_embeddings.expand(final_features.shape[0], -1)
+            final_features = self.fusion_module(final_features, text_embeddings)
+        spatial_emb = self.spatial_projection(final_features)
+        return spatial_emb, final_features
+
     def open_vocabulary_detect(
         self,
         images: torch.Tensor,
@@ -411,8 +432,10 @@ class KDEOVModel(nn.Module):
         # Use mean over classes as generic "object" embedding; broadcast to batch in get_spatial_embeddings.
         text_emb_fusion = text_emb.mean(dim=0, keepdim=True)
 
-        # Per-location image embeddings [B, D, Hf, Wf]
-        spatial_emb = self.get_spatial_embeddings(images, text_emb_fusion, use_fusion=True)
+        # Per-location image embeddings and fused features for bbox regression
+        spatial_emb, fused_features = self.get_spatial_embeddings_and_fused(
+            images, text_emb_fusion, use_fusion=True
+        )
         b, d, hf, wf = spatial_emb.shape
         num_cells = hf * wf
 
@@ -421,8 +444,21 @@ class KDEOVModel(nn.Module):
         scores_all = torch.matmul(spatial_flat, text_emb.t())
 
         # Default boxes in image coordinates (xyxy)
-        boxes = grid_boxes_to_image(hf, wf, img_h, img_w, cell_scale=cell_scale, device=device)
-        boxes = boxes.unsqueeze(0).expand(batch_size, -1, -1)
+        default_boxes = grid_boxes_to_image(hf, wf, img_h, img_w, cell_scale=cell_scale, device=device)
+        default_boxes = default_boxes.unsqueeze(0).expand(batch_size, -1, -1)
+
+        # Bbox regression: refine default boxes with learned offsets
+        bbox_offsets = self.bbox_regression_head(fused_features)  # [B, 4, Hf, Wf]
+        bbox_offsets_flat = bbox_offsets.permute(0, 2, 3, 1).reshape(batch_size, num_cells, 4)
+        boxes = default_boxes + bbox_offsets_flat
+        boxes = torch.stack([
+            boxes[..., 0].clamp(0, img_w),
+            boxes[..., 1].clamp(0, img_h),
+            boxes[..., 2].clamp(0, img_w),
+            boxes[..., 3].clamp(0, img_h),
+        ], dim=-1)
+        boxes[..., 2] = torch.max(boxes[..., 2], boxes[..., 0] + 1e-4)
+        boxes[..., 3] = torch.max(boxes[..., 3], boxes[..., 1] + 1e-4)
 
         # Per cell: max score over classes -> objectness; argmax -> label
         cell_scores, label_indices = scores_all.max(dim=-1)
