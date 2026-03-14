@@ -17,3 +17,5 @@ ultralytics  # For YOLOv8
 # Note: clip-by-openai should be installed separately after PyTorch
 # pip install git+https://github.com/openai/CLIP.git
 
+lvis
+# for evaluation

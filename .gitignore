@@ -24,3 +24,7 @@ weights/
 
 # --- 训练 checkpoint 与曲线图 ---
 checkpoints/
+
+# --- 评估结果 ---
+eval_lvis_results.json
+training_evaluation_results/

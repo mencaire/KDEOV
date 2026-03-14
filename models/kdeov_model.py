@@ -407,8 +407,12 @@ class KDEOVModel(nn.Module):
             text_emb = text_emb.view(len(class_names), -1)
         text_emb = F.normalize(text_emb, dim=-1)
 
+        # FiLM fusion expects one text vector per image [B, D], not per class [C, D].
+        # Use mean over classes as generic "object" embedding; broadcast to batch in get_spatial_embeddings.
+        text_emb_fusion = text_emb.mean(dim=0, keepdim=True)
+
         # Per-location image embeddings [B, D, Hf, Wf]
-        spatial_emb = self.get_spatial_embeddings(images, text_emb, use_fusion=True)
+        spatial_emb = self.get_spatial_embeddings(images, text_emb_fusion, use_fusion=True)
         b, d, hf, wf = spatial_emb.shape
         num_cells = hf * wf
 
@@ -442,7 +446,8 @@ class KDEOVModel(nn.Module):
 
             boxes_i = boxes_i[keep]
             scores_i = scores_i[keep]
-            labels_i = labels_i[keep]
+            # labels_i is on CPU; index with CPU mask
+            labels_i = labels_i[keep.cpu()]
             label_names = [class_names[int(k)] for k in labels_i.tolist()]
 
             # NMS (per-image; class-agnostic) and cap number of detections

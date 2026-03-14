@@ -15,6 +15,13 @@ import json
 from pathlib import Path
 
 import numpy as np
+
+# NumPy 1.24+ removed np.float; lvis 0.5.3 still uses it. Restore alias so we don't patch lvis.
+if not hasattr(np, "float"):
+    np.float = np.float64
+if not hasattr(np, "int"):
+    np.int = np.int64
+
 import torch
 from PIL import Image
 from tqdm import tqdm
@@ -93,10 +100,11 @@ def load_lvis_val(data_root: str):
         name_to_cat_id[name] = cid
 
     img_infos = []
-    for iid, info in images.items():
-        path = img_dir / info["file_name"]
+    for iid in images.keys():
+        # LVIS uses COCO images; path by COCO convention (id zero-padded to 12 digits)
+        path = img_dir / f"{iid:012d}.jpg"
         if path.exists():
-            img_infos.append({"id": iid, "path": str(path), "file_name": info["file_name"]})
+            img_infos.append({"id": iid, "path": str(path), "file_name": f"{iid:012d}.jpg"})
     return img_infos, class_names, name_to_cat_id
 
 
@@ -171,22 +179,29 @@ def run_eval_lvis(model, img_infos, class_names, name_to_cat_id, device, data_ro
                         "score": float(scores[k]),
                     })
 
+    out_path = "eval_lvis_results.json"
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=1)
+    n = len(results)
+    if n == 0:
+        print(f"No detections above score threshold ({score_thresh}). Saved empty list to {out_path}.")
+        print("Try a lower threshold, e.g.: --score-thresh 0.01")
+    else:
+        print(f"Saved {n} predictions to {out_path}.")
+
     try:
         from lvis import LVIS
         from lvis.eval import LVISEval
 
         ann_file = data_root / "lvis" / "annotations" / "lvis_v1_val.json"
         lvis_gt = LVIS(str(ann_file))
-        lvis_dt = lvis_gt.loadRes(results)
-        lvis_eval = LVISEval(lvis_gt, lvis_dt, "bbox")
+        # LVISEval accepts lvis_dt as list of dicts (or path); no loadRes in pip lvis
+        lvis_eval = LVISEval(lvis_gt, results, "bbox")
         lvis_eval.run()
         lvis_eval.print_results()
         return getattr(lvis_eval, "results", None)
     except ImportError:
         print("LVIS API not installed. Install with: pip install lvis")
-        print("Saving predictions to eval_lvis_results.json for manual evaluation.")
-        with open("eval_lvis_results.json", "w") as f:
-            json.dump(results[: 100], f, indent=1)
         return None
 
 
