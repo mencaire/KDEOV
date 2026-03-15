@@ -18,6 +18,11 @@ import torch.nn.functional as F
 import clip
 from tqdm import tqdm
 
+try:
+    from torchvision.ops import box_iou
+except ImportError:
+    box_iou = None
+
 from models import KDEOVModel
 from models.components import grid_boxes_to_image
 from data.detection_dataset import COCODetectionDataset, collate_detection
@@ -44,6 +49,20 @@ def box_center_to_cell(boxes_xyxy: torch.Tensor, hf: int, wf: int) -> torch.Tens
     return (iy * wf + ix).long()
 
 
+def box_best_cell(box_xyxy: torch.Tensor, default_boxes: torch.Tensor, hf: int, wf: int) -> int:
+    """Return the cell index whose default box has the best IoU with the given box. Fallback: center cell if box_iou not available."""
+    if box_iou is not None and default_boxes.device == box_xyxy.device:
+        iou = box_iou(default_boxes, box_xyxy.unsqueeze(0)).squeeze(1)
+        return iou.argmax().item()
+    cx = (box_xyxy[0] + box_xyxy[2]) / 2
+    cy = (box_xyxy[1] + box_xyxy[3]) / 2
+    stride_w = IMAGE_SIZE / max(wf, 1)
+    stride_h = IMAGE_SIZE / max(hf, 1)
+    ix = min(int(cx / stride_w), wf - 1)
+    iy = min(int(cy / stride_h), hf - 1)
+    return iy * wf + ix
+
+
 def train_finetune(
     checkpoint_path: str,
     data_root: str = "datasets",
@@ -53,6 +72,11 @@ def train_finetune(
     lr: float = 1e-5,
     backbone: str = "yolov8n",
     fusion: str = "film",
+    reg_weight: float = 2.0,
+    neg_weight: float = 0.5,
+    neg_margin: float = 0.0,
+    max_neg_per_image: int = 32,
+    use_best_iou_cell: bool = True,
 ):
     device = get_device()
     print(f"Device: {device}")
@@ -121,15 +145,26 @@ def train_finetune(
 
             cls_loss_sum = 0.0
             reg_loss_sum = 0.0
+            neg_loss_sum = 0.0
             count_cls = 0
             count_reg = 0
+            count_neg = 0
+            positive_cells_per_image = []
             for i in range(b):
                 n = (labels[i] >= 0).sum().item()
                 if n == 0:
+                    positive_cells_per_image.append(set())
                     continue
                 boxes_i = boxes[i][:n]
                 labels_i = labels[i][:n]
-                cell_indices = box_center_to_cell(boxes_i, hf, wf)
+                if use_best_iou_cell:
+                    cell_indices = torch.tensor(
+                        [box_best_cell(boxes_i[j], default_boxes, hf, wf) for j in range(n)],
+                        device=boxes_i.device, dtype=torch.long
+                    )
+                else:
+                    cell_indices = box_center_to_cell(boxes_i, hf, wf)
+                positive_cells_per_image.append(set(cell_indices.cpu().tolist()))
                 logits_i = logits[i]
                 logits_at_cell = logits_i[cell_indices]
                 cls_loss_sum += F.cross_entropy(logits_at_cell, labels_i)
@@ -137,22 +172,39 @@ def train_finetune(
                 for j in range(n):
                     cidx = cell_indices[j].item()
                     iy, ix = cidx // wf, cidx % wf
-                    target_offset = boxes_i[j] - default_boxes[cidx].to(device)
+                    target_offset = boxes_i[j] - default_boxes[cidx]
                     pred_offset = bbox_offsets[i, :, iy, ix]
                     reg_loss_sum += F.smooth_l1_loss(pred_offset, target_offset)
                     count_reg += 1
+            # Negative (background) loss: push max logit down at cells with no object
+            num_cells = hf * wf
+            for i in range(b):
+                pos_set = positive_cells_per_image[i]
+                neg_candidates = [c for c in range(num_cells) if c not in pos_set]
+                if len(neg_candidates) == 0:
+                    continue
+                n_neg = min(max_neg_per_image, len(neg_candidates))
+                perm = torch.randperm(len(neg_candidates))[:n_neg].tolist()
+                neg_indices = torch.tensor([neg_candidates[p] for p in perm], device=device, dtype=torch.long)
+                max_logit_neg = logits[i][neg_indices].max(dim=1).values
+                neg_loss_sum += F.relu(max_logit_neg - neg_margin).mean()
+                count_neg += 1
             if count_cls == 0:
                 continue
             cls_loss = cls_loss_sum / max(count_cls, 1)
             reg_loss = reg_loss_sum / max(count_reg, 1) if count_reg > 0 else torch.tensor(0.0, device=device)
-            reg_weight = 2.0
-            loss = cls_loss + reg_weight * reg_loss
+            neg_loss = neg_loss_sum / max(count_neg, 1) if count_neg > 0 else torch.tensor(0.0, device=device)
+            loss = cls_loss + reg_weight * reg_loss + neg_weight * neg_loss
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
             num_batches += 1
-            pbar.set_postfix(loss=loss.item(), cls=cls_loss.item(), reg=reg_loss.item() if count_reg > 0 else 0.0)
+            pbar.set_postfix(
+                loss=loss.item(), cls=cls_loss.item(),
+                reg=reg_loss.item() if count_reg > 0 else 0.0,
+                neg=neg_loss.item() if count_neg > 0 else 0.0
+            )
 
         avg_loss = total_loss / max(num_batches, 1)
         print(f"Epoch {epoch+1}/{epochs} avg loss: {avg_loss:.4f}")
@@ -177,6 +229,11 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--backbone", type=str, default="yolov8n", choices=["yolov8n", "yolov5s"])
     parser.add_argument("--fusion", type=str, default="film", choices=["film", "cross_attention"])
+    parser.add_argument("--reg-weight", type=float, default=2.0, help="Weight for bbox regression loss")
+    parser.add_argument("--neg-weight", type=float, default=0.5, help="Weight for negative (background) cell loss")
+    parser.add_argument("--neg-margin", type=float, default=0.0, help="Margin below which negative cell max-logit is not penalized")
+    parser.add_argument("--max-neg-per-image", type=int, default=32, help="Max negative cells sampled per image")
+    parser.add_argument("--no-best-iou-cell", action="store_true", help="Use center cell instead of best-IoU cell for GT assignment")
     args = parser.parse_args()
 
     train_finetune(
@@ -188,6 +245,11 @@ def main():
         lr=args.lr,
         backbone=args.backbone,
         fusion=args.fusion,
+        reg_weight=args.reg_weight,
+        neg_weight=args.neg_weight,
+        neg_margin=args.neg_margin,
+        max_neg_per_image=args.max_neg_per_image,
+        use_best_iou_cell=not args.no_best_iou_cell,
     )
 
 

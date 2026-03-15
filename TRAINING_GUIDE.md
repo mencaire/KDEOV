@@ -259,7 +259,11 @@ Evaluation **does** compare the model’s predicted bboxes to ground truth (IoU 
 - **Quick check:** Run `python debug_eval_iou.py` (from project root) to see how many GT instances get a matching prediction at IoU ≥ 0.5 and the max IoU.
 - **Try a higher score threshold** to reduce FPs and see if AP becomes non-zero, e.g.  
   `python eval_detection.py --checkpoint ... --dataset lvis --score-thresh 0.2` or `--score-thresh 0.25`.
-- **Longer-term:** The model includes a bbox regression head (trained in Step 3); improve discriminativity with more/better finetuning or background negatives if needed.
+- **Finetuning improvements (if AP still 0):** Re-run Step 3 with the updated script, which now includes:
+  - **Negative (background) loss:** Random cells with no object are trained to have low max-logit (`--neg-weight 0.5`, `--neg-margin 0`), reducing false positives.
+  - **Best-IoU cell assignment:** Each GT is assigned to the grid cell whose default box has the best IoU with it (instead of only the center cell), giving better regression targets. Use `--no-best-iou-cell` to revert to center-only.
+  - Example: `python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 10 --neg-weight 0.5 --reg-weight 2.0 --save-path checkpoints/kdeov_finetune_v2`
+- **Eval with higher score threshold:** `--score-thresh 0.2` or `0.25` to reduce FPs.
 
 ### "LVIS annotations not found"
 
@@ -331,18 +335,27 @@ python download_data.py --dataset coco_lvis
 python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco_lvis
 ```
 
-**Step 3 — Fine-tuning with bounding boxes (COCO train):**
+**Step 3 — Fine-tuning with bounding boxes (COCO 2017 train; uses negative loss + best-IoU assignment):**
 ```bash
-python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 5 --batch-size 16 --save-path checkpoints/kdeov_finetune
+python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 10 --batch-size 16 --neg-weight 0.5 --reg-weight 2.0 --save-path checkpoints/kdeov_finetune
 ```
 
-**Step 4 — Evaluation (get mAP, AP@50, LVIS AP):**
+**Step 4 — Evaluation:**  
+Run COCO val first (80 classes; saves `eval_coco_results.json`), then LVIS if desired (saves `eval_lvis_results.json`).
+```bash
+python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset coco
+```
+*(Optional: LVIS val. If AP is 0, add `--score-thresh 0.2`.)*
 ```bash
 python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset lvis
 ```
-*(Optional: COCO val 80-class metrics.)*
+
+*(Optional: debug IoU — use the same `--dataset` as the eval you just ran.)*
 ```bash
-python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset coco
+python debug_eval_iou.py --dataset coco
+```
+```bash
+python debug_eval_iou.py --dataset lvis
 ```
 
 No other scripts are required. The numbers printed at the end of the eval commands are what you report as your experimental results.

@@ -164,6 +164,10 @@ def run_eval_coco(model, img_infos, class_names, name_to_cat_id, device, data_ro
                         "bbox": [x1, y1, x2 - x1, y2 - y1],
                         "score": float(scores[k]),
                     })
+    out_path = "eval_coco_results.json"
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=1)
+    print(f"Saved {len(results)} predictions to {out_path}.")
     coco_dt = coco_gt.loadRes(results)
     eval_obj = COCOeval(coco_gt, coco_dt, "bbox")
     eval_obj.evaluate()

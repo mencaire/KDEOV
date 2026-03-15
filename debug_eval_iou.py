@@ -1,9 +1,13 @@
 """
 Debug script: check if any prediction has IoU >= 0.5 with a GT of the same category.
 Helps determine why AP is 0 (coords wrong vs grid boxes never overlap enough).
-Run from project root: python debug_eval_iou.py
+
+Usage:
+  python debug_eval_iou.py              # default: LVIS (eval_lvis_results.json)
+  python debug_eval_iou.py --dataset coco   # COCO (eval_coco_results.json)
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -29,17 +33,28 @@ def iou_xyxy(box1, box2):
 
 
 def main():
-    data_root = Path("datasets")
-    ann_file = data_root / "lvis" / "annotations" / "lvis_v1_val.json"
-    results_path = Path("eval_lvis_results.json")
+    parser = argparse.ArgumentParser(description="Debug IoU between predictions and GT")
+    parser.add_argument("--dataset", type=str, choices=["coco", "lvis"], default="lvis",
+                        help="Match eval run: coco -> eval_coco_results.json, lvis -> eval_lvis_results.json")
+    parser.add_argument("--data-root", type=str, default="datasets")
+    args = parser.parse_args()
+
+    data_root = Path(args.data_root)
+    if args.dataset == "coco":
+        ann_file = data_root / "coco2017" / "annotations" / "instances_val2017.json"
+        results_path = Path("eval_coco_results.json")
+    else:
+        ann_file = data_root / "lvis" / "annotations" / "lvis_v1_val.json"
+        results_path = Path("eval_lvis_results.json")
 
     if not ann_file.exists():
-        print(f"LVIS annotations not found: {ann_file}")
+        print(f"Annotations not found: {ann_file}")
         return
     if not results_path.exists():
-        print(f"Results not found. Run eval first: {results_path}")
+        print(f"Results not found. Run eval first with --dataset {args.dataset}: {results_path}")
         return
 
+    print(f"Dataset: {args.dataset}, results: {results_path}")
     with open(ann_file) as f:
         data = json.load(f)
 
@@ -107,7 +122,7 @@ def main():
         print("   don't align with object boundaries. Consider: box regression head or")
         print("   larger cell_scale / different grid so some cell overlaps objects enough.")
     else:
-        print("\n-> Some predictions do reach IoU >= 0.5; if AP is still 0, check LVIS eval format.")
+        print("\n-> Some predictions do reach IoU >= 0.5; if AP is still 0, check eval format or score threshold.")
 
 
 if __name__ == "__main__":
