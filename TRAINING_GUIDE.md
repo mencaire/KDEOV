@@ -269,6 +269,32 @@ Evaluation **does** compare the model’s predicted bboxes to ground truth (IoU 
   - Example: `python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 10 --neg-weight 0.5 --reg-weight 2.0 --save-path checkpoints/kdeov_finetune_v2`
 - **Eval with higher score threshold:** `--score-thresh 0.2` or `0.25` to reduce FPs.
 
+### Optimizing for non-zero AP (when results are poor)
+
+If you have run feature alignment → fine-tuning → evaluation and **AP/AR are still 0** or very low, try the following in order.
+
+1. **Diagnose**  
+   Run `python debug_eval_iou.py --dataset coco` (or `--dataset lvis`). Check:
+   - **GT instances with ≥1 pred at IoU ≥ 0.5 (same cat):** if this is 0, the model rarely predicts the right class at the right place; focus on training (steps below).
+   - **Max IoU seen:** if it is below 0.5, localization is weak; use more regression (epochs, `--reg-loss giou`).
+
+2. **Re-run Step 3 with stronger settings**  
+   Use more epochs, stronger negative loss, and (optionally) GIoU for regression:
+   ```bash
+   python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 10 --batch-size 16 --neg-weight 1.0 --reg-weight 2.0 --reg-loss giou --save-path checkpoints/kdeov_finetune
+   ```
+   Then evaluate the new checkpoint:
+   ```bash
+   python eval_detection.py --checkpoint checkpoints/kdeov_finetune_optimized/kdeov_finetune.pt --dataset coco
+   ```
+
+3. **Tune eval threshold**  
+   - If you get many detections but AP still 0: try **higher** `--score-thresh` (e.g. `0.15`, `0.2`) to cut false positives.
+   - If you get 0 or very few detections: keep default `0.01` or try **lower** (e.g. `0.005`).
+
+4. **Optional: more feature alignment**  
+   If the visual features are still far from the text space, run Step 2 for more epochs (e.g. 15–20) and then repeat Step 3.
+
 ### "LVIS annotations not found"
 
 Run: `python download_data.py --dataset lvis`

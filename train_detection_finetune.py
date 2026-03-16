@@ -19,9 +19,10 @@ import clip
 from tqdm import tqdm
 
 try:
-    from torchvision.ops import box_iou
+    from torchvision.ops import box_iou, generalized_box_iou
 except ImportError:
     box_iou = None
+    generalized_box_iou = None
 
 from models import KDEOVModel
 from models.components import grid_boxes_to_image
@@ -77,6 +78,7 @@ def train_finetune(
     neg_margin: float = 0.0,
     max_neg_per_image: int = 32,
     use_best_iou_cell: bool = True,
+    reg_loss: str = "smooth_l1",
 ):
     device = get_device()
     print(f"Device: {device}")
@@ -172,9 +174,15 @@ def train_finetune(
                 for j in range(n):
                     cidx = cell_indices[j].item()
                     iy, ix = cidx // wf, cidx % wf
-                    target_offset = boxes_i[j] - default_boxes[cidx]
                     pred_offset = bbox_offsets[i, :, iy, ix]
-                    reg_loss_sum += F.smooth_l1_loss(pred_offset, target_offset)
+                    pred_box = default_boxes[cidx] + pred_offset
+                    target_box = boxes_i[j]
+                    if reg_loss == "giou" and generalized_box_iou is not None:
+                        giou = generalized_box_iou(pred_box.unsqueeze(0), target_box.unsqueeze(0)).squeeze()
+                        reg_loss_sum += (1.0 - giou).clamp(min=0.0)
+                    else:
+                        target_offset = target_box - default_boxes[cidx]
+                        reg_loss_sum += F.smooth_l1_loss(pred_offset, target_offset)
                     count_reg += 1
             # Negative (background) loss: push max logit down at cells with no object
             num_cells = hf * wf
@@ -234,6 +242,7 @@ def main():
     parser.add_argument("--neg-margin", type=float, default=0.0, help="Margin below which negative cell max-logit is not penalized")
     parser.add_argument("--max-neg-per-image", type=int, default=32, help="Max negative cells sampled per image")
     parser.add_argument("--no-best-iou-cell", action="store_true", help="Use center cell instead of best-IoU cell for GT assignment")
+    parser.add_argument("--reg-loss", type=str, default="smooth_l1", choices=["smooth_l1", "giou"], help="Bbox regression loss: smooth_l1 or giou (better localization)")
     args = parser.parse_args()
 
     train_finetune(
@@ -250,6 +259,7 @@ def main():
         neg_margin=args.neg_margin,
         max_neg_per_image=args.max_neg_per_image,
         use_best_iou_cell=not args.no_best_iou_cell,
+        reg_loss=args.reg_loss,
     )
 
 

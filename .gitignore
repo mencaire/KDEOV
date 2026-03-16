@@ -27,4 +27,5 @@ checkpoints/
 
 # --- 评估结果 ---
 eval_lvis_results.json
+eval_coco_results.json
 training_evaluation_results/
