@@ -256,54 +256,48 @@ This repository contains comprehensive documentation organized into the followin
 
 ### Training and Example Files
 
+These scripts follow the workflow in **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)**: Phase 1 (sanity check) → Phase 2 (feature alignment on COCO+LVIS) → Phase 3 (detection fine-tuning with bbox) → Phase 4 (evaluation on val2017).
+
 #### `train_feature_alignment.py`
-- **Purpose**: Feature alignment pretraining script
+- **Purpose**: Feature alignment pretraining (Phase 1 and Phase 2). Trains the KDEOV model with distillation loss and cross-modal alignment loss so that visual and text embeddings align. No bounding box labels; uses image–caption or image–category pairs from the chosen dataset.
 - **Functionalities**:
-  - Complete training loop implementation
-  - Support for distillation loss and cross-modal alignment loss
-  - Automatic checkpoint saving
-  - Learning rate scheduling and gradient clipping
-- **Usage Methods**:
+  - Training loop with distillation loss and cross-modal alignment loss
+  - Automatic checkpoint saving (per-epoch and optional resume)
+  - Supports datasets: `coco128` (sanity check), `coco2017`, `lvis`, `coco_lvis` (recommended for OVOD), `dummy`
+- **Usage** (see [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 1 and Phase 2):
   ```bash
-  # Method 1: Direct execution (using built-in example data)
-  python train_feature_alignment.py
-  
-  # Method 2: Import and call in code
-  from train_feature_alignment import train_feature_alignment
-  from models import KDEOVModel
-  from torch.utils.data import DataLoader
-  
-  # Initialize model
-  model = KDEOVModel(...).cuda()
-  
-  # Prepare data loader (requires custom dataset implementation)
-  dataloader = DataLoader(your_dataset, batch_size=32, shuffle=True)
-  
-  # Start training
-  train_feature_alignment(
-      model=model,
-      dataloader=dataloader,
-      num_epochs=10,
-      learning_rate=1e-4,
-      save_path="checkpoints/kdeov"  # Checkpoint save path
-  )
+  # Phase 1: Quick sanity check (COCO128)
+  python train_feature_alignment.py --dataset coco128 --epochs 5 --batch-size 16
+
+  # Phase 2: Full feature alignment (COCO + LVIS) — after: python download_data.py --dataset coco_lvis
+  python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco_lvis
   ```
-- **Parameter Specifications**:
-  - `num_epochs`: Number of training epochs (default: 10)
-  - `learning_rate`: Learning rate (default: 1e-4)
-  - `save_path`: Checkpoint save path (optional)
+- **Options**: `--dataset` (coco128 | coco2017 | lvis | coco_lvis | dummy), `--data-root`, `--split` (train | val), `--epochs`, `--lr`, `--batch-size`, `--save-path`, `--resume`, `--backbone`, `--fusion`. See [TRAINING_GUIDE.md](./TRAINING_GUIDE.md).
+
+#### `train_detection_finetune.py`
+- **Purpose**: Detection fine-tuning (Phase 3 / Step 3). After feature alignment, fine-tune with **bounding box labels** from COCO train2017 (`instances_train2017.json`). The grid cell responsible for each GT box (center or best-IoU default box) is trained to predict the correct class; optional bbox regression (smooth L1 or GIoU) and negative (background) cell loss. No extra download if `coco_lvis` is already present.
+- **Functionalities**:
+  - Loads a feature-alignment checkpoint and trains on COCO 2017 detection data
+  - Classification loss at the responsible cell (spatial feature · text embedding); optional regression and negative-cell loss
+  - Saves one checkpoint (e.g. `kdeov_finetune.pt`) under `--save-path` for use in Phase 4
+- **Usage** (see [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 3):
+  ```bash
+  python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 5 --batch-size 16 --save-path checkpoints/kdeov_finetune
+  ```
+- **Options**: `--checkpoint` (required), `--data-root`, `--save-path`, `--epochs`, `--batch-size`, `--lr`, `--backbone`, `--fusion`, `--reg-weight`, `--neg-weight`, `--neg-margin`, `--max-neg-per-image`, `--no-best-iou-cell`, `--reg-loss` (smooth_l1 | giou). See [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 3.
 
 #### `eval_detection.py`
-- **Purpose**: Evaluation script for Phase 3 (testing). Computes mAP, AP@50, and (on LVIS) AP_rare/common/frequent on val2017.
-- **Usage**:
+- **Purpose**: Evaluation (Phase 4 / Step 4). Run the trained model on **val2017** and compute detection metrics. Use the **fine-tuned** checkpoint if you ran Phase 3; otherwise the feature-alignment checkpoint. Computes mAP, AP@50; on LVIS val also AP, AP_rare, AP_common, AP_frequent.
+- **Usage** (see [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 4):
   ```bash
-  # LVIS val (primary OVOD benchmark)
-  python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset lvis
+  # LVIS val (primary OVOD benchmark) — use fine-tuned checkpoint when available
+  python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset lvis
 
   # COCO val (optional 80-class comparison)
-  python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset coco
+  python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset coco
   ```
-- **Options**: `--data-root`, `--batch-size`, `--score-thresh`, `--backbone`. See [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 3.
+  *(If you skipped Phase 3, use* `--checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt` *instead.)*
+- **Options**: `--checkpoint` (required), `--data-root`, `--dataset` (lvis | coco), `--batch-size`, `--score-thresh` (default 0.01), `--backbone`, `--fusion`. See [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 4.
 
 ### Utility Scripts
 
