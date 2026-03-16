@@ -110,11 +110,15 @@ def train_finetune(
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.01)
     num_classes = len(dataset.class_names)
     templates = ["a photo of a {}"]
 
     for epoch in range(epochs):
         total_loss = 0.0
+        total_cls = 0.0
+        total_reg = 0.0
+        total_neg = 0.0
         num_batches = 0
         pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}")
         for images, boxes, labels in pbar:
@@ -137,7 +141,7 @@ def train_finetune(
             b, d, hf, wf = spatial_emb.shape
             num_cells = hf * wf
             spatial_flat = spatial_emb.permute(0, 2, 3, 1).reshape(b, num_cells, d)
-            logits = torch.matmul(spatial_flat, text_emb.t())
+            logits = torch.matmul(spatial_flat, text_emb.t()) * model.detection_scale.exp()
 
             # Bbox regression: default boxes and predicted offsets
             default_boxes = grid_boxes_to_image(
@@ -205,8 +209,12 @@ def train_finetune(
             loss = cls_loss + reg_weight * reg_loss + neg_weight * neg_loss
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             total_loss += loss.item()
+            total_cls += cls_loss.item()
+            total_reg += reg_loss.item() if count_reg > 0 else 0.0
+            total_neg += neg_loss.item() if count_neg > 0 else 0.0
             num_batches += 1
             pbar.set_postfix(
                 loss=loss.item(), cls=cls_loss.item(),
@@ -214,8 +222,12 @@ def train_finetune(
                 neg=neg_loss.item() if count_neg > 0 else 0.0
             )
 
+        scheduler.step()
         avg_loss = total_loss / max(num_batches, 1)
-        print(f"Epoch {epoch+1}/{epochs} avg loss: {avg_loss:.4f}")
+        avg_cls = total_cls / max(num_batches, 1)
+        avg_reg = total_reg / max(num_batches, 1)
+        avg_neg = total_neg / max(num_batches, 1)
+        print(f"Epoch {epoch+1}/{epochs} avg loss: {avg_loss:.4f} (cls: {avg_cls:.4f}, reg: {avg_reg:.4f}, neg: {avg_neg:.6f}) lr: {scheduler.get_last_lr()[0]:.2e}")
 
     Path(save_path).mkdir(parents=True, exist_ok=True)
     out_file = Path(save_path) / "kdeov_finetune.pt"

@@ -295,6 +295,17 @@ If you have run feature alignment → fine-tuning → evaluation and **AP/AR are
 4. **Optional: more feature alignment**  
    If the visual features are still far from the text space, run Step 2 for more epochs (e.g. 15–20) and then repeat Step 3.
 
+### Loss not converging / oscillating during fine-tuning
+
+If the total loss goes down then up (e.g. 23 → 18 → 20 → 22) and does not stabilize:
+
+- **Detection scale is now used in training:** The script multiplies logits by `detection_scale.exp()` so the scale is trained and consistent with evaluation.
+- **Cosine LR scheduler:** Learning rate decays over epochs (down to 1% of initial), which often helps loss stabilize in later epochs.
+- **Gradient clipping:** Gradients are clipped to max norm 1.0 to avoid spikes.
+- **Try more epochs:** Run with `--epochs 10` or `15` to see if loss flattens after the scheduler reduces lr.
+- **Try lower learning rate:** Use `--lr 5e-6` for smoother updates (e.g. if loss still oscillates with 1e-5).
+- **Per-epoch breakdown:** The script now prints avg cls / reg / neg per epoch. If **cls** stays near ~4.38 (ln(80)), the model is barely better than random at the positive cells; consider more feature alignment or epochs.
+
 ### "LVIS annotations not found"
 
 Run: `python download_data.py --dataset lvis`
@@ -347,44 +358,52 @@ For full LVIS metrics (AP, AP_rare, etc.), install the LVIS API: `pip install lv
 
 ## Recommended Experiment Order — Copy-paste commands
 
-Run these in order. Copy each line into your terminal (from project root, with `conda activate KDEOV` already done).
+Run these in order in your terminal (project root, `conda activate KDEOV` already done). Copy each line and press Enter.
 
-**Step 1 — Sanity check (COCO128):**
+**Step 1 — Sanity check (COCO128)**  
+Download data:
 ```bash
 python download_data.py --dataset coco128
 ```
+Train:
 ```bash
 python train_feature_alignment.py --dataset coco128 --epochs 5 --batch-size 16
 ```
 
-**Step 2 — Full data and feature alignment (COCO + LVIS):**
+**Step 2 — Full data and feature alignment (COCO + LVIS)**  
+Download data:
 ```bash
 python download_data.py --dataset coco_lvis
 ```
+Train:
 ```bash
 python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 --batch-size 32 --save-path checkpoints/kdeov_coco_lvis
 ```
 
-**Step 3 — Fine-tuning with bounding boxes (COCO 2017 train; uses negative loss + best-IoU assignment):**
+**Step 3 — Fine-tuning with bounding boxes (COCO 2017 train)**  
+Run:
 ```bash
 python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 5 --batch-size 16 --neg-weight 0.5 --reg-weight 2.0 --save-path checkpoints/kdeov_finetune
 ```
-*(If AP is still 0 after eval, re-run Step 3 with `--epochs 10`.)*
+If AP is still 0 after Step 4, re-run Step 3 with more epochs:
+```bash
+python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 10 --batch-size 16 --neg-weight 0.5 --reg-weight 2.0 --save-path checkpoints/kdeov_finetune
+```
 
-**Step 4 — Evaluation:**  
-Run COCO val first (80 classes; saves `eval_coco_results.json`), then LVIS if desired (saves `eval_lvis_results.json`).
+**Step 4 — Evaluation**  
+COCO val (80 classes; writes `eval_coco_results.json`):
 ```bash
 python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset coco
 ```
-*(Optional: LVIS val. If AP is 0, add `--score-thresh 0.2`.)*
+LVIS val (optional; writes `eval_lvis_results.json`):
 ```bash
 python eval_detection.py --checkpoint checkpoints/kdeov_finetune/kdeov_finetune.pt --dataset lvis
 ```
-
-*(Optional: debug IoU — use the same `--dataset` as the eval you just ran.)*
+Debug IoU for COCO (optional):
 ```bash
 python debug_eval_iou.py --dataset coco
 ```
+Debug IoU for LVIS (optional):
 ```bash
 python debug_eval_iou.py --dataset lvis
 ```
