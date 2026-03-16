@@ -122,6 +122,9 @@ class KDEOVModel(nn.Module):
         )
         self.bbox_regression_head = BBoxRegressionHead(input_dim=backbone_output_dim)
 
+        # Learned scale for detection scores (cosine sim often in narrow band; scale amplifies for thresholding)
+        self.detection_scale = nn.Parameter(torch.ones([]) * np.log(3.0))
+
         # 2. CRITICAL: Add Temperature Parameter for Contrastive Learning
         # Initialized to log(1/0.07) following CLIP paper
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
@@ -439,9 +442,9 @@ class KDEOVModel(nn.Module):
         b, d, hf, wf = spatial_emb.shape
         num_cells = hf * wf
 
-        # [B, Hf*Wf, D] @ [num_classes, D].t() -> [B, Hf*Wf, num_classes]
+        # [B, Hf*Wf, D] @ [num_classes, D].t() -> [B, Hf*Wf, num_classes]; scale for usable score range
         spatial_flat = spatial_emb.permute(0, 2, 3, 1).reshape(b, num_cells, d)
-        scores_all = torch.matmul(spatial_flat, text_emb.t())
+        scores_all = torch.matmul(spatial_flat, text_emb.t()) * self.detection_scale.exp()
 
         # Default boxes in image coordinates (xyxy)
         default_boxes = grid_boxes_to_image(hf, wf, img_h, img_w, cell_scale=cell_scale, device=device)

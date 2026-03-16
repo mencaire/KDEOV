@@ -168,6 +168,9 @@ def run_eval_coco(model, img_infos, class_names, name_to_cat_id, device, data_ro
     with open(out_path, "w") as f:
         json.dump(results, f, indent=1)
     print(f"Saved {len(results)} predictions to {out_path}.")
+    if len(results) == 0:
+        print("No detections above score threshold. COCO metrics set to 0. Try: --score-thresh 0.01")
+        return (0.0,) * 12
     coco_dt = coco_gt.loadRes(results)
     eval_obj = COCOeval(coco_gt, coco_dt, "bbox")
     eval_obj.evaluate()
@@ -249,7 +252,7 @@ def main():
     parser.add_argument("--data-root", type=str, default="datasets", help="Root directory for datasets")
     parser.add_argument("--dataset", type=str, choices=["coco", "lvis"], default="lvis", help="Evaluate on COCO val (80 cls) or LVIS val (1203 cls)")
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--score-thresh", type=float, default=0.1,
+    parser.add_argument("--score-thresh", type=float, default=0.01,
                         help="Min detection score. If AP is 0, try 0.2–0.25 to reduce false positives.")
     parser.add_argument("--backbone", type=str, default="yolov8n", choices=["yolov8n", "yolov5s"])
     parser.add_argument("--fusion", type=str, default="film", choices=["film", "cross_attention"], help="Must match training")

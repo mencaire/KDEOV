@@ -252,9 +252,13 @@ The metrics table is what reviewers and readers will look at as the main “resu
 
 Run COCO2017 first: `python download_data.py --dataset coco2017 --parts train2017 val2017`
 
+### "Saved 0 predictions" / no detections at eval
+
+Detection scores (cosine similarity × learned scale) may all sit below the score threshold. Eval now uses **default `--score-thresh 0.01`**. The model has a learned **detection_scale**; old checkpoints get its default init (×3). **Re-run Step 3 (finetuning)** so the scale is trained, then eval again.
+
 ### "AP / AR are 0" on LVIS or COCO
 
-Evaluation **does** compare the model’s predicted bboxes to ground truth (IoU + category). If AP is still 0 after feature alignment and finetuning, the usual cause is **too many false positives**: the script outputs many detections per image (e.g. 100) at low score (default `--score-thresh 0.1`), so only a tiny fraction match GT, and precision is effectively zero.
+Evaluation **does** compare the model’s predicted bboxes to ground truth (IoU + category). If AP is still 0 after feature alignment and finetuning, the usual cause is **too many false positives**: the script outputs many detections per image (e.g. 100) at low score (default `--score-thresh 0.01`), so only a tiny fraction match GT, and precision is effectively zero.
 
 - **Quick check:** Run `python debug_eval_iou.py` (from project root) to see how many GT instances get a matching prediction at IoU ≥ 0.5 and the max IoU.
 - **Try a higher score threshold** to reduce FPs and see if AP becomes non-zero, e.g.  
@@ -337,8 +341,9 @@ python train_feature_alignment.py --dataset coco_lvis --split train --epochs 10 
 
 **Step 3 — Fine-tuning with bounding boxes (COCO 2017 train; uses negative loss + best-IoU assignment):**
 ```bash
-python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 10 --batch-size 16 --neg-weight 0.5 --reg-weight 2.0 --save-path checkpoints/kdeov_finetune
+python train_detection_finetune.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --epochs 5 --batch-size 16 --neg-weight 0.5 --reg-weight 2.0 --save-path checkpoints/kdeov_finetune
 ```
+*(If AP is still 0 after eval, re-run Step 3 with `--epochs 10`.)*
 
 **Step 4 — Evaluation:**  
 Run COCO val first (80 classes; saves `eval_coco_results.json`), then LVIS if desired (saves `eval_lvis_results.json`).
