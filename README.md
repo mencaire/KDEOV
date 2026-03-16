@@ -142,11 +142,18 @@ The first term has been primarily dedicated to **theoretical research** and foun
 - ✅ IDE configuration for development
 
 ### Term 2 (Ongoing) — From February
+
+**Dataset, Finetuning & Evaluation (Completed):**
+- ✅ **Dataset preparation**: COCO + LVIS (`coco_lvis`) prepared for feature alignment and open-vocabulary detection
+- ✅ **Finetuning**: Training pipeline on COCO 2017 for detection finetuning
+- ✅ **Evaluation**: Evaluation pipeline and benchmarking in place
+
+**Current issue:**
+- **AP/AR = 0**: Detection evaluation currently reports zero Average Precision and Average Recall; debugging and fixing this is in progress
+
 **Planned next steps:**
-- Dataset preparation and data-loading pipeline
-- Training on real image–text caption datasets (e.g., COCO)
-- Performance evaluation and benchmarking
-- Model optimization and fine-tuning
+- **Resolve AP/AR = 0**: Diagnose evaluation, labels, or training
+- **Model optimization**: Further fine-tuning once metrics are valid
 
 ### Documentation
 
@@ -297,28 +304,6 @@ This repository contains comprehensive documentation organized into the followin
   python eval_detection.py --checkpoint checkpoints/kdeov_coco_lvis_epoch_10.pt --dataset coco
   ```
 - **Options**: `--data-root`, `--batch-size`, `--score-thresh`, `--backbone`. See [TRAINING_GUIDE.md](./TRAINING_GUIDE.md) Phase 3.
-
-#### `example_usage.py`
-- **Purpose**: Model usage examples and demonstrations
-- **Included Examples**:
-  1. **Zero-shot Classification** (`example_zero_shot_classification`)
-     - Demonstrates zero-shot image classification using the model
-  2. **Text-Image Retrieval** (`example_text_image_retrieval`)
-     - Demonstrates retrieving most similar images based on text queries
-  3. **Forward Pass** (`example_forward_pass`)
-     - Demonstrates standard model forward propagation
-- **Usage Methods**:
-  ```bash
-  # Run all examples
-  python example_usage.py
-  
-  # Or call individual examples in code
-  from example_usage import example_zero_shot_classification
-  example_zero_shot_classification()
-  ```
-- **Important Notes**:
-  - Examples use random data; replace with real images and text for actual usage
-  - First run will automatically download CLIP pretrained weights
 
 ### Utility Scripts
 
@@ -500,13 +485,31 @@ KDEOV/
 │   ├── losses.py                     # Loss function implementations (distillation loss, alignment loss, etc.)
 │   └── README.md                     # Detailed model architecture documentation
 │
+├── data/                             # Data loading and dataset implementations
+│   ├── __init__.py                  # Package initialization, exports dataset classes
+│   ├── coco_dataset.py              # COCO 2017 dataset for detection / feature alignment
+│   ├── detection_dataset.py         # Generic detection dataset and collation
+│   └── lvis_dataset.py              # LVIS dataset for open-vocabulary detection evaluation
+│
+├── download_data.py                  # Data download script (COCO, LVIS, coco_lvis)
+│                                      # Purpose: Download and unpack datasets
+│                                      # Execution: python download_data.py --dataset coco_lvis
+│
 ├── train_feature_alignment.py        # Feature alignment pretraining script
-│                                      # Purpose: Train KDEOV model
+│                                      # Purpose: Train KDEOV model (image–text alignment)
 │                                      # Execution: python train_feature_alignment.py
+│
+├── train_detection_finetune.py       # Detection finetuning script (COCO 2017)
+│                                      # Purpose: Finetune KDEOV for open-vocabulary detection
+│                                      # Execution: python train_detection_finetune.py (see TRAINING_GUIDE.md)
 │
 ├── eval_detection.py                 # Evaluation script (Phase 3)
 │                                      # Purpose: mAP / AP@50 on LVIS val or COCO val
 │                                      # Execution: python eval_detection.py --checkpoint <path> --dataset lvis
+│
+├── debug_eval_iou.py                 # Debug script for detection evaluation (IoU / matching)
+│                                      # Purpose: Diagnose evaluation pipeline and box matching
+│                                      # Execution: python debug_eval_iou.py
 │
 ├── example_usage.py                  # Model usage examples
 │                                      # Purpose: Demonstrate zero-shot classification, text-image retrieval, etc.
@@ -524,8 +527,14 @@ KDEOV/
 │                                      # Purpose: Define all required Python packages for the project
 │                                      # Usage: pip install -r requirements.txt
 │
+├── .gitignore                        # Git ignore rules (data dirs, checkpoints, IDE, etc.)
+│                                      # Purpose: Exclude generated and local files from version control
+│
 ├── README.md                         # Main project documentation (this file)
 │                                      # Purpose: Project overview, installation guide, usage instructions
+│
+├── TRAINING_GUIDE.md                 # COCO + LVIS training workflow and commands
+│                                      # Purpose: End-to-end training, finetuning, and evaluation guide
 │
 ├── Development_Log.md                # Development log
 │                                      # Purpose: Record development process, work content, problem resolution
@@ -548,13 +557,22 @@ KDEOV/
 | `models/components.py` | Python Module | Model component implementations | Used via `KDEOVModel` |
 | `models/kdeov_model.py` | Python Module | Main model class | `from models import KDEOVModel` |
 | `models/losses.py` | Python Module | Loss functions | `from models import FeatureAlignmentLoss` |
-| `train_feature_alignment.py` | Executable Script | Model training | `python train_feature_alignment.py` |
+| `models/README.md` | Documentation | Model architecture and API | Reference reading |
+| `data/__init__.py` | Python Module | Export dataset APIs | `from data import ...` |
+| `data/coco_dataset.py` | Python Module | COCO 2017 dataset | Used via training/eval scripts |
+| `data/detection_dataset.py` | Python Module | Detection dataset and collation | Used via training/eval scripts |
+| `data/lvis_dataset.py` | Python Module | LVIS dataset for OVOD evaluation | Used via eval scripts |
+| `download_data.py` | Executable Script | Download COCO, LVIS, coco_lvis | `python download_data.py --dataset coco_lvis` |
+| `train_feature_alignment.py` | Executable Script | Feature alignment pretraining | `python train_feature_alignment.py` |
+| `train_detection_finetune.py` | Executable Script | Detection finetuning (COCO 2017) | `python train_detection_finetune.py` (see TRAINING_GUIDE.md) |
 | `eval_detection.py` | Executable Script | Evaluation (mAP, AP@50 on val) | `python eval_detection.py --checkpoint <path> --dataset lvis` |
+| `debug_eval_iou.py` | Executable Script | Debug evaluation / IoU matching | `python debug_eval_iou.py` |
 | `example_usage.py` | Executable Script | Usage examples | `python example_usage.py` |
 | `test_scripts/test_environment.py` | Executable Script | Verify CUDA, CLIP, ultralytics | `python test_scripts/test_environment.py` |
 | `test_scripts/test_backbone.py` | Executable Script | Test YOLO backbone functionality | `python test_scripts/test_backbone.py` |
 | `test_scripts/model_summary.py` | Executable Script | Model architecture analysis and statistics | `python test_scripts/model_summary.py` |
 | `requirements.txt` | Configuration File | Dependency management | `pip install -r requirements.txt` |
-| `README.md` | Documentation | Project description | Reference reading |
+| `.gitignore` | Configuration File | Git ignore rules | Applied by Git |
+| `README.md` | Documentation | Project overview and usage | Reference reading |
+| `TRAINING_GUIDE.md` | Documentation | COCO + LVIS training workflow | Reference reading |
 | `Development_Log.md` | Documentation | Development records | Reference reading |
-| `models/README.md` | Documentation | Model documentation | Reference reading |
